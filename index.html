@@ -53,6 +53,190 @@
   #logo-root{ grid-column: 3 !important; justify-self: end !important; width:auto !important; display:flex !important; justify-content:flex-end !important; }
 }
 
+</style>
+</head>
+
+<body class="p-2 sm:p-6">
+
+  <!-- Loading -->
+  <div id="loader" class="fixed inset-0 bg-gray-900/80 z-[9999] flex flex-col items-center justify-center hidden">
+    <div class="animate-spin rounded-full h-16 w-16 border-t-4 border-b-4 border-blue-500 mb-4"></div>
+    <p class="text-white font-bold">กำลังประมวลผล...</p>
+  </div>
+
+  <!-- Login -->
+  <div id="loginOverlay" class="fixed inset-0 bg-slate-900 z-[100] flex items-center justify-center p-4 hidden">
+    <div class="bg-white p-8 rounded-xl shadow-2xl w-full max-w-sm text-center">
+      <h1 class="text-4xl font-extrabold text-blue-800 mb-4">KOSITD8</h1>
+      <input type="text" id="loginUser" placeholder="Username" class="w-full border-2 p-3 rounded-lg mb-3 text-center focus:border-blue-500">
+      <input type="password" id="loginPass" placeholder="Password" class="w-full border-2 p-3 rounded-lg mb-4 text-center focus:border-blue-500">
+      <button onclick="doLogin()" class="w-full bg-blue-600 text-white font-bold py-3 rounded-lg hover:bg-blue-700">เข้าสู่ระบบ</button>
+      <div class="mt-4 text-xs text-gray-500 text-left bg-gray-50 p-2 rounded">
+        <p><b>ทดสอบระบบ (รหัสผ่าน 123 ทุกอัน):</b></p>
+        <p>admin (ผู้ดูแลระบบ) | factory (ฝ่ายโรงงาน)</p>
+        <p>manager (ผู้อนุมัติ) | site (หน้างาน โครงการ A)</p>
+        <p>user (ผู้เบิก โครงการ A)</p>
+      </div>
+    </div>
+  </div>
+
+  <!-- Autocomplete -->
+  <div id="autocomplete" class="absolute z-[9999] bg-white border shadow-xl hidden max-h-48 overflow-y-auto text-sm rounded"></div>
+
+  <!-- Navbar -->
+  <div class="max-w-[1000px] mx-auto mb-4 flex flex-col gap-3 no-print">
+    <div class="flex justify-between items-center bg-white p-3 rounded-lg shadow-sm border">
+      <div class="font-bold text-gray-800">👤 <span id="currUser"></span> <span id="roleBadge" class="text-[10px] text-white px-2 py-0.5 rounded bg-gray-500 ml-2"></span></div>
+      <button onclick="doLogout()" class="text-red-500 font-bold hover:underline">ออกจากระบบ</button>
+    </div>
+    <div class="flex flex-wrap gap-2" id="navButtons"></div>
+  </div>
+
+  <!-- Main Form -->
+  <div class="doc-container relative" id="printableArea">
+    <div class="flex flex-col sm:flex-row justify-between items-center mb-6 gap-4" id="topHeader" id="topHeader">
+      <div class="w-full sm:w-1/4 no-print" id="leftBlock" id="leftBlock">
+        <button id="btnPull" onclick="openPullModal()" class="hidden bg-blue-100 text-blue-700 border border-blue-500 px-4 py-2 rounded font-bold text-sm w-full">📥 ดึงข้อมูลใบเบิก</button>
+      </div>
+      <div class="w-full flex justify-center flex-col items-center" id="titleBlock">
+        <select id="docType" onchange="changeDocType()" class="text-3xl font-bold text-center border-b-2 border-gray-300 pb-1 w-full focus:border-blue-500 no-print">
+          <option value="ใบเบิกวัสดุ">ใบเบิกวัสดุ</option>
+          <option value="ใบเบิกรถ">ใบเบิกรถ</option>
+          <option value="ใบเบิกคนงาน">ใบเบิกคนงาน</option>
+          <option value="ใบส่งคืนวัสดุ">ใบส่งคืนวัสดุ</option>
+          <option value="ใบจัดส่งวัสดุ">ใบจัดส่งวัสดุ</option>
+        </select>
+        <div id="printDocTitle" class="hidden print:block text-2xl font-bold text-center w-full">ใบเบิกวัสดุ</div>
+      </div>
+      <div class="w-full sm:w-1/4 flex justify-end" id="logo-root"><img id=\"logoImg\" alt=\"Logo\" style=\"height:48px;width:auto;\" /></div>
+    </div>
+
+    <div class="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-4 text-sm sm:text-base">
+      <div class="flex flex-col gap-2">
+        <div class="flex items-end"><label class="font-bold w-28">โครงการ:</label><input type="text" id="docProject" list="projList" class="flex-1 input-line font-bold text-blue-800 bg-blue-50/50 px-2"><datalist id="projList"></datalist></div>
+        <div class="flex items-end"><label class="font-bold w-28">สถานที่ส่งมอบ:</label><input type="text" id="docLocation" class="flex-1 input-line"></div>
+      </div>
+      <div class="flex flex-col gap-2 sm:pl-8">
+        <div class="flex items-end sm:justify-end"><label class="font-bold w-28 sm:w-auto sm:pr-2">วันที่:</label><input type="text" id="docDate" class="flex-1 sm:w-32 input-line sm:text-center"></div>
+        <div class="flex items-end sm:justify-end"><label class="font-bold w-28 sm:w-auto sm:pr-2">เลขที่เอกสาร:</label><input type="text" id="docNo" readonly class="flex-1 sm:w-32 input-line sm:text-center font-bold text-red-600 print:text-black" placeholder="บันทึกร่าง"></div>
+      </div>
+    </div>
+
+    <div id="extraFields" class="mb-4 text-sm hidden no-print bg-gray-50 p-3 rounded border"></div>
+
+    <div class="overflow-x-auto mb-4">
+      <table class="w-full border-collapse border border-black min-w-[700px]" id="mainTable">
+        <thead class="bg-slate-800 text-white text-sm print:bg-gray-200 print:text-black" id="tableHead"></thead>
+        <tbody id="tableBody"></tbody>
+      </table>
+    </div>
+
+    <div class="flex flex-col sm:flex-row justify-between items-center gap-4 no-print mb-10" id="actionButtons">
+      <button onclick="addRow()" class="text-blue-700 font-bold hover:underline w-full sm:w-auto text-left">+ เพิ่มรายการ</button>
+      <div class="flex gap-2 w-full sm:w-auto">
+        <button onclick="clearForm()" class="bg-red-100 text-red-700 px-4 py-2 rounded font-bold hover:bg-red-200">ล้างข้อมูล</button>
+        <button id="btnCancel" onclick="cancelEdit()" class="hidden bg-gray-500 text-white px-4 py-2 rounded font-bold hover:bg-gray-600">ยกเลิก/ปิด</button>
+        <button id="btnDraft" onclick="saveDoc('draft')" class="bg-slate-200 px-4 py-2 rounded font-bold hover:bg-slate-300">💾 บันทึกร่าง</button>
+        <button id="btnSave" onclick="saveDoc('submitted')" class="bg-blue-600 text-white px-6 py-2 rounded font-bold shadow-lg hover:bg-blue-700">🚀 ส่งเข้าระบบ</button>
+      </div>
+    </div>
+
+    <div class="grid grid-cols-3 gap-4 mt-16 mb-8 text-center text-sm">
+      <div class="flex flex-col items-center">
+        <div id="sig1Name" class="font-bold text-blue-800 print:text-black h-6"></div>
+        <div class="border-b border-black w-32 mx-auto mb-1"></div>
+        <span id="sig1Role">ผู้เบิก</span>
+      </div>
+      <div class="flex flex-col items-center opacity-0 print:opacity-100">
+        <div class="font-bold h-6"></div>
+        <div class="border-b border-black w-32 mx-auto mb-1"></div>
+        <span>ผู้อนุมัติ</span>
+      </div>
+      <div class="flex flex-col items-center opacity-0 print:opacity-100">
+        <div class="font-bold h-6"></div>
+        <div class="border-b border-black w-32 mx-auto mb-1"></div>
+        <span id="sig3Role">ผู้รับของ</span>
+      </div>
+    </div>
+
+    <div class="text-center no-print border-t pt-4">
+      <button onclick="window.print()" class="bg-green-600 text-white px-8 py-2 rounded-lg font-bold hover:bg-green-700 shadow-lg">🖨️ สั่งพิมพ์</button>
+    </div>
+  </div>
+
+  <!-- Generic Modal -->
+  <div id="genericModal" class="fixed inset-0 modal-bg hidden z-50 flex items-center justify-center p-4">
+    <div class="bg-white rounded-xl shadow-2xl w-full max-w-6xl max-h-[95vh] flex flex-col">
+      <div class="p-4 border-b flex justify-between items-center rounded-t-xl" id="modalHeader">
+        <h2 class="font-bold text-lg text-white" id="modalTitle">Title</h2>
+        <button onclick="closeModal('genericModal')" class="text-2xl text-white hover:text-gray-200">&times;</button>
+      </div>
+      <div class="p-3 bg-gray-50 border-b flex gap-2 items-center" id="modalToolbar"></div>
+      <div class="p-4 overflow-y-auto flex-1 bg-white" id="modalContent"></div>
+    </div>
+  </div>
+
+<script>
+// ================= CONFIG =================
+const SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbwuApKMXOL4xuyKdLhJVhAx8IYr5n-L6mrCL8g1N88cC6EPsLQvZBaHDMcNW86FsF4fgg/exec';
+
+// ================= LOGO BASE64 (RIGHT) =================
+// วาง Base64 แบบ Data URI ที่นี่ เช่น: data:image/png;base64,AAAA...
+const LOGO_DATA_URI = '<!DOCTYPE html>
+<html lang="th">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>KOSITD8 - PR Form</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <style>
+    @import url('https://fonts.googleapis.com/css2?family=Sarabun:wght@400;700&display=swap');
+    body { font-family: 'Sarabun', sans-serif; background-color: #f3f4f6; color: #000; }
+    .doc-container { max-width: 1000px; margin: 20px auto; background: #fff; padding: 30px; box-shadow: 0 4px 10px rgba(0,0,0,0.1); border-radius: 8px; }
+    input, select, textarea { font-family: inherit; background: transparent; outline: none; width: 100%; }
+    textarea { resize: none; overflow: hidden; }
+    .input-line { border-bottom: 1px solid #9ca3af; padding: 2px 4px; }
+    .input-line:focus { border-bottom: 2px solid #3b82f6; }
+    .modal-bg { background-color: rgba(0,0,0,0.6); backdrop-filter: blur(3px); }
+
+    @media print {
+      @page { size: A4; margin: 10mm; }
+      body { background: #fff; }
+      .doc-container { box-shadow: none; padding: 0; margin: 0; max-width: 100%; }
+      .no-print { display: none !important; }
+
+      #docType { display: none !important; }
+      #printDocTitle {
+        display: block !important;
+        width: 100% !important;
+        text-align: center !important;
+        font-size: 24pt !important;
+        font-weight: 800 !important;
+        margin: 0 0 12px 0 !important;
+      }
+
+      .overflow-x-auto { overflow: visible !important; }
+      textarea { resize: none !important; border: none !important; }
+      table { width: 100% !important; border-collapse: collapse !important; table-layout: fixed; }
+      th, td { border: 1px solid #000 !important; padding: 4px !important; word-wrap: break-word; vertical-align: top; }
+      .input-line { border-bottom: 1px dotted #000 !important; }
+      table input, table textarea { border: none !important; }
+    }
+  
+
+/* ===== HEADER ALIGN (SCREEN + PRINT): Logo ขวา / หัวข้อกึ่งกลางทั้งหน้า ===== */
+@media (min-width: 640px){
+  #topHeader{ display:grid !important; grid-template-columns: 1fr auto 1fr !important; align-items:center !important; }
+  #leftBlock{ grid-column: 1 !important; justify-self: start !important; }
+  #titleBlock{ grid-column: 2 !important; justify-self: center !important; width:auto !important; }
+  #logo-root{ grid-column: 3 !important; justify-self: end !important; width:auto !important; display:flex !important; justify-content:flex-end !important; }
+}
+@media print{
+  #topHeader{ display:grid !important; grid-template-columns: 1fr auto 1fr !important; align-items:center !important; }
+  #titleBlock{ grid-column: 2 !important; justify-self: center !important; width:auto !important; }
+  #logo-root{ grid-column: 3 !important; justify-self: end !important; width:auto !important; display:flex !important; justify-content:flex-end !important; }
+}
+
 
 
 /* ===== FIX CENTER TITLE (SCREEN + PRINT) ===== */
@@ -992,5 +1176,806 @@ document.addEventListener('DOMContentLoaded', async ()=>{
 </script>
 
 </body>
+</html>';
+// หรือใช้ URL รูปแทน
+const LOGO_URL = '';
+
+function setLogo(){
+  const img = document.getElementById('logoImg');
+  if(!img) return;
+  const src = (LOGO_DATA_URI && LOGO_DATA_URI.trim()) ? LOGO_DATA_URI.trim() : (LOGO_URL||'').trim();
+  if(src){
+    img.src = src;
+    img.style.display = 'block';
+  } else {
+    // ถ้าไม่ใส่โลโก้ ให้ซ่อนรูป (กันรูปแตก)
+    img.removeAttribute('src');
+    img.style.display = 'none';
+  }
+}
+
+// ================= HELPERS =================
+function toggleLoader(show){
+  const el = document.getElementById('loader');
+  if(!el) return;
+  el.classList.toggle('hidden', !show);
+}
+function escapeHtml(s){
+  return String(s||'')
+    .replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')
+    .replace(/"/g,'&quot;').replace(/'/g,'&#039;');
+}
+function escapeJs(s){
+  return String(s||'')
+    .replace(/\\/g,'\\\\')
+    .replace(/'/g,"\\'")
+    .replace(/"/g,'\\"')
+    .replace(/\n/g,'\\n')
+    .replace(/\r/g,'\\r');
+}
+async function apiGet(paramsObj){
+  const qs = new URLSearchParams(paramsObj).toString();
+  const res = await fetch(`${SCRIPT_URL}?${qs}`, { method:'GET', redirect:'follow' });
+  return await res.json();
+}
+async function apiPost(bodyObj){
+  const res = await fetch(SCRIPT_URL, {
+    method:'POST',
+    headers:{ 'Content-Type':'text/plain;charset=utf-8' },
+    body: JSON.stringify(bodyObj),
+    redirect:'follow'
+  });
+  return await res.json();
+}
+async function safeApiCall(action, sheetName, dataPayload){
+  try{
+    if(!navigator.onLine) throw new Error('Offline');
+    const result = await apiPost({ action, sheet: sheetName, ...dataPayload });
+    if(result && result.success === false) throw new Error(result.error || 'API error');
+    return result;
+  }catch(e){
+    console.warn('Offline/Backend error -> keep LocalStorage', e);
+    return { success:false, error:String(e) };
+  }
+}
+
+// ================= DB =================
+let DB = { users:[], stock:[], emp:[], records:[] };
+let currentUser = null;
+let currentEditId = null;
+let currentPulledReqId = null;
+let currentViewRecord = null;
+let currentAutocompleteInput = null;
+let isViewMode = false;
+
+function initDB(){
+  if(!localStorage.getItem('kos_users')){
+    localStorage.setItem('kos_users', JSON.stringify([
+      {user:'admin', pass:'123', name:'ผู้ดูแลระบบ', role:'admin', proj:''},
+      {user:'factory', pass:'123', name:'ฝ่ายโรงงาน', role:'admin factory', proj:''},
+      {user:'manager', pass:'123', name:'ผู้จัดการ', role:'manager', proj:''},
+      {user:'site', pass:'123', name:'วิศวกรไซต์ A', role:'project site', proj:'โครงการ A'},
+      {user:'user', pass:'123', name:'ช่างทั่วไป A', role:'user', proj:'โครงการ A'}
+    ]));
+    localStorage.setItem('kos_stock', JSON.stringify([
+      {code:'M01', name:'ปูนซีเมนต์', size:'50kg', unit:'ถุง', price:120, supplier:'SCG', img:''},
+      {code:'M02', name:'เหล็กเส้น', size:'9mm', unit:'เส้น', price:150, supplier:'Tata', img:''}
+    ]));
+    localStorage.setItem('kos_emp', JSON.stringify([{name:'สมชาย', wage:500}]));
+    localStorage.setItem('kos_records', JSON.stringify([]));
+  }
+  DB.users = JSON.parse(localStorage.getItem('kos_users')) || [];
+  DB.stock = JSON.parse(localStorage.getItem('kos_stock')) || [];
+  DB.emp = JSON.parse(localStorage.getItem('kos_emp')) || [];
+  DB.records = JSON.parse(localStorage.getItem('kos_records')) || [];
+  refreshProjList();
+}
+function saveLocal(){
+  localStorage.setItem('kos_users', JSON.stringify(DB.users));
+  localStorage.setItem('kos_stock', JSON.stringify(DB.stock));
+  localStorage.setItem('kos_emp', JSON.stringify(DB.emp));
+  localStorage.setItem('kos_records', JSON.stringify(DB.records));
+  refreshProjList();
+}
+function refreshProjList(){
+  document.getElementById('projList').innerHTML = [...new Set(DB.records.map(r=>r.proj))]
+    .filter(Boolean)
+    .map(p=>`<option value="${escapeHtml(p)}">`).join('');
+}
+
+async function syncFromBackend(){
+  if(!navigator.onLine) return;
+  toggleLoader(true);
+  try{
+    const data = await apiGet({ resource:'readAll' });
+    if(!data.ok) throw new Error(data.error || 'readAll failed');
+
+    if(Array.isArray(data.users)){
+      DB.users = data.users.map(u=>({
+        user: String(u.user ?? u.username ?? '').trim(),
+        pass: String(u.pass ?? u.password ?? '').trim(),
+        name: String(u.name ?? '').trim(),
+        role: String(u.role ?? '').trim(),
+        proj: String(u.proj ?? '').trim()
+      })).filter(x=>x.user);
+    }
+    if(Array.isArray(data.stock)){
+      DB.stock = data.stock.map(s=>({
+        code: String(s.code ?? s.item_code ?? '').trim(),
+        name: String(s.name ?? s.item_name ?? '').trim(),
+        size: String(s.size ?? '').trim(),
+        unit: String(s.unit ?? '').trim(),
+        price: Number(s.price ?? s.price_default ?? 0),
+        supplier: String(s.supplier ?? '').trim(),
+        img: String(s.img ?? s.image_url ?? '').trim(),
+      })).filter(x=>x.name);
+    }
+    if(Array.isArray(data.emp)){
+      DB.emp = data.emp.map(e=>({
+        name: String(e.name ?? '').trim(),
+        wage: Number(e.wage ?? e.price ?? 0)
+      })).filter(x=>x.name);
+    }
+    if(Array.isArray(data.records)){
+      DB.records = data.records.map(r=>{
+        let items = [];
+        try{ items = JSON.parse(r.items || '[]'); }catch{}
+        return {
+          id: String(r.id ?? '').trim(),
+          user: String(r.user ?? '').trim(),
+          date: String(r.date ?? '').trim(),
+          proj: String(r.proj ?? '').trim(),
+          type: String(r.type ?? '').trim(),
+          items,
+          status: String(r.status ?? '').trim(),
+          docNo: String(r.docNo ?? '').trim(),
+          exDriver: String(r.exDriver ?? '').trim(),
+          exPlate: String(r.exPlate ?? '').trim(),
+          exReceiver: String(r.exReceiver ?? '').trim(),
+          refId: String(r.refId ?? '').trim(),
+        };
+      }).filter(x=>x.id);
+    }
+
+    saveLocal();
+  }catch(e){
+    console.warn('Sync failed, use local', e);
+  }finally{
+    toggleLoader(false);
+  }
+}
+
+// ================= AUTH =================
+function doLogin(){
+  const u = document.getElementById('loginUser').value.trim();
+  const p = document.getElementById('loginPass').value.trim();
+  const user = DB.users.find(x => x.user === u && x.pass === p);
+  if(user){ localStorage.setItem('kos_active_user', JSON.stringify(user)); location.reload(); }
+  else alert('รหัสผ่านผิด');
+}
+function doLogout(){ localStorage.removeItem('kos_active_user'); location.reload(); }
+
+// ================= MODAL =================
+function openModal(title, contentHtml, colorClass='bg-gray-800', toolbarHtml=''){
+  document.getElementById('modalHeader').className = `p-4 border-b flex justify-between items-center rounded-t-xl ${colorClass}`;
+  document.getElementById('modalTitle').innerText = title;
+  document.getElementById('modalToolbar').innerHTML = toolbarHtml;
+  document.getElementById('modalToolbar').classList.toggle('hidden', toolbarHtml === '');
+  document.getElementById('modalContent').innerHTML = contentHtml;
+  document.getElementById('genericModal').classList.remove('hidden');
+}
+function closeModal(id){ document.getElementById(id).classList.add('hidden'); }
+
+// ================= WORKFLOW HELPERS =================
+
+
+// ================= STOCK Y/N DISPLAY =================
+function ynSummary(record){
+  const items = record?.items || [];
+  let y=0,n=0,na=0;
+  items.forEach(it=>{
+    const v = String(it.stockYN||'').toUpperCase();
+    if(v==='Y') y++; else if(v==='N') n++; else na++;
+  });
+  if(items.length===0) return '';
+  return `Y=${y} / N=${n}` + (na?` / - ${na}`:'');
+}
+function shouldShowStockCol(type, record){
+  const t = String(type||'');
+  const okType = (t==='ใบเบิกวัสดุ' || t==='ใบจัดส่งวัสดุ');
+  const st = String(record?.status||'');
+  return okType && ['manager_review','factory_price','delivered'].includes(st);
+}
+
+function getStockPriceByName(itemName){
+  const s = DB.stock.find(x => (x.name||'').trim() === (itemName||'').trim());
+  return s ? Number(s.price||0) : 0;
+}
+function statusLabel(st){
+  switch(st){
+    case 'draft': return '📝 ร่าง';
+    case 'factory_check': return '🏭 รอ Factory เช็คสต๊อก';
+    case 'manager_review': return '✅ รอ Manager อนุมัติ';
+    case 'factory_price': return '💰 รอ Factory ใส่ราคา (N)';
+    case 'delivered': return '🚚 จัดส่งแล้ว';
+    default: return st || '-';
+  }
+}
+
+async function syncSheetRecords(){
+  const rows = [
+    ['id','user','date','proj','type','items','status','docNo','exDriver','exPlate','exReceiver','refId'],
+    ...DB.records.map(r=>[
+      r.id, r.user, r.date, r.proj, r.type,
+      JSON.stringify(r.items||[]),
+      r.status, r.docNo||'',
+      r.exDriver||'', r.exPlate||'', r.exReceiver||'', r.refId||''
+    ])
+  ];
+  return await safeApiCall('writeAll','Records',{ rows });
+}
+async function syncSheetStock(){
+  const rows = [
+    ['code','name','size','unit','price','supplier','img'],
+    ...DB.stock.map(s=>[s.code||'',s.name||'',s.size||'',s.unit||'',Number(s.price||0),s.supplier||'',s.img||''])
+  ];
+  return await safeApiCall('writeAll','Stock',{ rows });
+}
+async function syncSheetEmp(){
+  const rows = [
+    ['name','wage'],
+    ...DB.emp.map(e=>[e.name||'',Number(e.wage||0)])
+  ];
+  return await safeApiCall('writeAll','Emp',{ rows });
+}
+async function syncAfterChange(kind){
+  toggleLoader(true);
+  try{
+    if(kind==='records') return await syncSheetRecords();
+    if(kind==='stock') return await syncSheetStock();
+    if(kind==='emp') return await syncSheetEmp();
+    return {success:true};
+  } finally {
+    toggleLoader(false);
+  }
+}
+
+// ================= UI SETUP =================
+function setupUI(){
+  document.getElementById('currUser').innerText = currentUser.name;
+  document.getElementById('roleBadge').innerText = (currentUser.role||'').toUpperCase();
+  document.getElementById('sig1Name').innerText = currentUser.name;
+
+  if(currentUser.proj){
+    document.getElementById('docProject').value = currentUser.proj;
+    document.getElementById('docProject').readOnly = true;
+  }
+
+  const role = (currentUser.role||'').toLowerCase();
+  let btns = '';
+  btns += `<button onclick="openStock()" class="bg-amber-600 text-white px-3 py-1.5 rounded text-sm font-bold shadow">📦 สต๊อกวัสดุ</button>`;
+
+  if(role === 'admin' || role === 'admin factory'){
+    btns += `<button onclick="openEmp()" class="bg-teal-600 text-white px-3 py-1.5 rounded text-sm font-bold shadow">👥 พนักงาน</button>`;
+    btns += `<button onclick="openFactory()" class="bg-orange-600 text-white px-3 py-1.5 rounded text-sm font-bold shadow">📑 จัดการงาน (Factory)</button>`;
+  }
+  if(role === 'admin' || role === 'manager'){
+    btns += `<button onclick="openManager()" class="bg-blue-600 text-white px-3 py-1.5 rounded text-sm font-bold shadow">✅ อนุมัติงาน (Manager)</button>`;
+  }
+  if(role !== 'user'){
+    btns += `<button onclick="openSummary()" class="bg-indigo-600 text-white px-3 py-1.5 rounded text-sm font-bold shadow">📊 สรุปต้นทุน</button>`;
+  }
+  btns += `<button onclick="openHistory()" class="bg-gray-800 text-white px-3 py-1.5 rounded text-sm font-bold shadow">📂 ประวัติ/ติดตาม</button>`;
+  document.getElementById('navButtons').innerHTML = btns;
+
+  const docType = document.getElementById('docType');
+  docType.innerHTML = `<option value="ใบเบิกวัสดุ">ใบเบิกวัสดุ</option><option value="ใบเบิกรถ">ใบเบิกรถ</option><option value="ใบเบิกคนงาน">ใบเบิกคนงาน</option><option value="ใบส่งคืนวัสดุ">ใบส่งคืนวัสดุ</option>`;
+  if(['admin','admin factory','manager'].includes(role)) docType.innerHTML += `<option value="ใบจัดส่งวัสดุ">ใบจัดส่งวัสดุ</option>`;
+
+  changeDocType();
+}
+
+// ================= FORM LOGIC =================
+function changeDocType(){
+  const type = document.getElementById('docType').value;
+  const showStockYN = shouldShowStockCol(type, currentViewRecord);
+  document.getElementById('printDocTitle').innerText = type;
+  document.getElementById('btnPull').classList.toggle('hidden', type !== 'ใบจัดส่งวัสดุ' && type !== 'ใบส่งคืนวัสดุ');
+
+  let extra = document.getElementById('extraFields');
+  extra.innerHTML = ''; extra.classList.add('hidden');
+
+  if(type === 'ใบเบิกรถ' || type === 'ใบจัดส่งวัสดุ'){
+    extra.innerHTML = `<div class="flex gap-4"><div class="flex-1"><label class="font-bold">คนขับ:</label><input type="text" id="exDriver" class="input-line bg-white" ${isViewMode?'readonly':''}></div><div class="flex-1"><label class="font-bold">ทะเบียน:</label><input type="text" id="exPlate" class="input-line bg-white" ${isViewMode?'readonly':''}></div></div>`;
+    extra.classList.remove('hidden');
+  } else if(type === 'ใบส่งคืนวัสดุ'){
+    extra.innerHTML = `<div><label class="font-bold">ผู้รับคืน (โรงงาน):</label><input type="text" id="exReceiver" class="input-line bg-white" ${isViewMode?'readonly':''}></div>`;
+    extra.classList.remove('hidden');
+  }
+
+  document.getElementById('sig1Role').innerText = (type === 'ใบจัดส่งวัสดุ') ? 'ผู้จัดส่ง' : 'ผู้เบิก';
+  document.getElementById('sig3Role').innerText = (type === 'ใบส่งคืนวัสดุ') ? 'รง.รับคืน' : 'ผู้รับของ';
+
+  let wItem = type === 'ใบจัดส่งวัสดุ' ? 'w-[40%]' : 'w-[30%]';
+  let wNote = type === 'ใบจัดส่งวัสดุ' ? 'w-[10%]' : 'w-[20%]';
+
+  let th = `<th class="border px-1 py-2 w-[5%]">ลำดับ</th><th class="border px-2 py-2 ${wItem}">รายการ</th><th class="border px-1 py-2 w-[10%]">จำนวน</th>`;
+  if(type === 'ใบจัดส่งวัสดุ'){
+    th += `<th class="border px-1 py-2 w-[10%] text-green-300 print:text-black">จัดส่ง</th><th class="border px-1 py-2 w-[10%] text-red-300 print:text-black">คงค้าง</th>`;
+  }
+  th += `<th class="border px-1 py-2 w-[10%]">หน่วย</th><th class="border px-2 py-2 ${wNote}">หมายเหตุ</th>`;
+  if(!isViewMode) th += `<th class="border px-1 py-2 w-[5%] no-print">ลบ</th>`;
+
+  document.getElementById('tableHead').innerHTML = `<tr>${th}</tr>`;
+
+  if(!currentEditId && !currentPulledReqId && !isViewMode){
+    document.getElementById('tableBody').innerHTML = '';
+    for(let i=0;i<3;i++) addRow();
+  }
+}
+
+function addRow(data = {}){
+  const type = document.getElementById('docType').value;
+  const showStockYN = shouldShowStockCol(type, currentViewRecord);
+  const isDel = (type === 'ใบจัดส่งวัสดุ');
+  const ro = isViewMode ? 'readonly' : '';
+
+  const tr = document.createElement('tr');
+  let td = `<td class="border px-1 py-1 text-center seq font-bold text-gray-500"></td>`;
+  td += `<td class="border px-1 py-1"><textarea class="w-full item" rows="1" oninput="autoResize(this); updateSeq()" onfocus="showAuto(this)" data-price="${data.price||0}" ${ro}>${escapeHtml(data.name||'')}</textarea></td>`;
+  td += `<td class="border px-1 py-1"><input type="number" class="w-full text-center qty" value="${escapeHtml(data.qty||'')}" ${ro}></td>`;
+
+  if(isDel){
+    td += `<td class="border px-1 py-1"><input type="number" class="w-full text-center del-qty text-green-600 font-bold" value="${escapeHtml(data.del||'')}" oninput="calcPend(this)" ${ro}></td>`;
+    td += `<td class="border px-1 py-1"><input type="number" class="w-full text-center pend-qty text-red-600 font-bold" value="${escapeHtml(data.pend||'')}" readonly></td>`;
+  }
+
+  td += `<td class="border px-1 py-1"><input type="text" class="w-full text-center unit" value="${escapeHtml(data.unit||'')}" ${ro}></td>`;
+  td += `<td class="border px-1 py-1"><textarea class="w-full note" rows="1" oninput="autoResize(this)" ${ro}>${escapeHtml(data.note||'')}</textarea></td>`;
+
+  if(!isViewMode){
+    td += `<td class="border px-1 py-1 text-center no-print"><button onclick="this.closest('tr').remove(); updateSeq();" class="text-red-500 font-bold">&times;</button></td>`;
+  }
+
+  tr.innerHTML = td;
+  document.getElementById('tableBody').appendChild(tr);
+  updateSeq();
+}
+
+function updateSeq(){
+  let count = 1;
+  document.querySelectorAll('#tableBody tr').forEach(tr=>{
+    const hasItem = tr.querySelector('.item').value.trim() !== '';
+    tr.querySelector('.seq').innerText = hasItem ? count++ : '';
+  });
+}
+function calcPend(input){
+  const tr = input.closest('tr');
+  const qty = parseFloat(tr.querySelector('.qty').value) || 0;
+  const del = parseFloat(input.value) || 0;
+  tr.querySelector('.pend-qty').value = Math.max(qty - del, 0);
+}
+function autoResize(el){ el.style.height='auto'; el.style.height = el.scrollHeight + 'px'; }
+function clearForm(){ document.getElementById('tableBody').innerHTML=''; for(let i=0;i<3;i++) addRow(); }
+
+// ================= AUTOCOMPLETE =================
+function showAuto(input){
+  if(isViewMode) return;
+  currentAutocompleteInput = input;
+  const type = document.getElementById('docType').value;
+  let list = type === 'ใบเบิกคนงาน' ? DB.emp.map(e=>({name:e.name, unit:'วัน', price:e.wage})) : DB.stock;
+
+  const div = document.getElementById('autocomplete');
+  div.innerHTML = list.map(x => `
+    <div class="p-2 border-b cursor-pointer hover:bg-blue-50 flex items-center gap-2" onmousedown="selectAuto('${escapeJs(x.name)}','${escapeJs(x.unit||'')}',${Number(x.price||0)})">
+      ${x.img ? `<img src="${x.img}" class="w-8 h-8 object-cover rounded">` : `<div class="w-8 h-8 bg-gray-200 rounded flex items-center justify-center text-[10px]">No Pic</div>`}
+      <div>
+        <div class="font-bold">${escapeHtml(x.name)} <span class="text-xs text-gray-500 font-normal">(${escapeHtml(x.unit||'')})</span></div>
+        <div class="text-xs text-gray-400">รหัส: ${escapeHtml(x.code||'-')} | ขนาด: ${escapeHtml(x.size||'-')} | Sup: ${escapeHtml(x.supplier||'-')}</div>
+      </div>
+    </div>`).join('');
+
+  const rect = input.getBoundingClientRect();
+  div.style.left = rect.left + 'px';
+  div.style.top = (rect.bottom + window.scrollY) + 'px';
+  div.style.width = Math.max(rect.width, 300) + 'px';
+  div.classList.remove('hidden');
+}
+function selectAuto(name, unit, price){
+  if(currentAutocompleteInput){
+    currentAutocompleteInput.value = name;
+    const tr = currentAutocompleteInput.closest('tr');
+    if(tr.querySelector('.unit')) tr.querySelector('.unit').value = unit;
+    currentAutocompleteInput.dataset.price = price;
+    autoResize(currentAutocompleteInput);
+    updateSeq();
+  }
+  document.getElementById('autocomplete').classList.add('hidden');
+}
+document.addEventListener('mousedown', e=>{
+  if(!e.target.closest('#autocomplete') && !e.target.classList.contains('item')){
+    document.getElementById('autocomplete').classList.add('hidden');
+  }
+});
+
+// ================= SAVE DOC (workflow) =================
+async function saveDoc(status){
+  const proj = document.getElementById('docProject').value.trim();
+  if(!proj) return alert('ระบุโครงการ');
+
+  let items = [];
+  document.querySelectorAll('#tableBody tr').forEach(tr=>{
+    const name = tr.querySelector('.item').value.trim();
+    if(name){
+      let obj = {
+        name,
+        qty: tr.querySelector('.qty').value,
+        unit: tr.querySelector('.unit').value,
+        note: tr.querySelector('.note').value,
+        price: Number(tr.querySelector('.item').dataset.price || 0),
+        stockYN: '',
+        priceFinal: ''
+      };
+      if(tr.querySelector('.del-qty')){ obj.del = tr.querySelector('.del-qty').value; obj.pend = tr.querySelector('.pend-qty').value; }
+      items.push(obj);
+    }
+  });
+  if(items.length === 0) return alert('เพิ่มรายการอย่างน้อย 1 รายการ');
+
+  const type = document.getElementById('docType').value;
+  let docNo = document.getElementById('docNo').value.trim();
+  if(status === 'submitted' && !docNo){
+    const year = new Date().getFullYear() + 543;
+    const count = DB.records.filter(r => r.proj === proj && r.type === type && r.status !== 'draft').length + 1;
+    docNo = `${String(count).padStart(3,'0')}/${year}`;
+  }
+
+  const rec = {
+    id: currentEditId || Date.now().toString(),
+    user: currentUser.name,
+    proj,
+    type,
+    date: document.getElementById('docDate').value,
+    docNo: status === 'draft' ? '' : docNo,
+    status: status === 'draft' ? 'draft' : 'factory_check',
+    items,
+    exDriver: document.getElementById('exDriver')?.value || '',
+    exPlate: document.getElementById('exPlate')?.value || '',
+    exReceiver: document.getElementById('exReceiver')?.value || '',
+    refId: currentPulledReqId || ''
+  };
+
+  if(currentEditId){
+    const idx = DB.records.findIndex(r=>r.id === currentEditId);
+    if(idx > -1) DB.records[idx] = rec;
+  }else{
+    DB.records.push(rec);
+  }
+
+  saveLocal();
+  const res = await syncAfterChange('records');
+
+  if(res?.success){
+    alert(status === 'submitted' ? `ส่งเอกสาร ${docNo} แล้ว ✅ (เข้าคิว Factory เช็คสต๊อก)` : 'บันทึกร่างสำเร็จ ✅');
+  } else {
+    alert(status === 'submitted' ? `ส่งเอกสาร ${docNo} แล้ว (Local) — ยังไม่ sync` : 'บันทึกร่างแล้ว (Local)');
+  }
+
+  location.reload();
+}
+
+// ================= HISTORY =================
+function openHistory(){
+  const projs = [...new Set(DB.records.map(r => r.proj))].filter(Boolean);
+  let tb = `<label class="font-bold text-sm">โครงการ:</label><select id="histProj" onchange="renderHistory()" class="border p-1 rounded"><option value="ALL">ทั้งหมด</option>${projs.map(p=>`<option value="${escapeHtml(p)}">${escapeHtml(p)}</option>`).join('')}</select>`;
+  openModal('📂 ประวัติการทำรายการ / ติดตามสถานะ', '<div id="histContent"></div>', 'bg-gray-800', tb);
+  renderHistory();
+}
+function renderHistory(){
+  const proj = document.getElementById('histProj').value;
+  let recs = DB.records;
+  const role = (currentUser?.role||'').toLowerCase();
+  if(role === 'user' || role === 'project site') recs = recs.filter(r => r.proj === currentUser.proj);
+  if(proj !== 'ALL') recs = recs.filter(r => r.proj === proj);
+
+  let html = `<table class="w-full text-sm border"><thead class="bg-gray-200"><tr><th class="p-2 border">เอกสาร</th><th class="p-2 border">โครงการ</th><th class="p-2 border">ประเภท</th><th class="p-2 border text-center">สถานะ</th><th class="p-2 border text-center">จัดการ</th></tr></thead><tbody>`;
+  const list = recs.slice().reverse();
+  if(list.length === 0) html += `<tr><td colspan="5" class="text-center p-4 text-gray-500">ไม่มีข้อมูล</td></tr>`;
+  else {
+    html += list.map(r=>{
+      const canEdit = (r.status === 'draft' && r.user === currentUser.name);
+      const btnText = canEdit ? 'แก้ไข' : 'ดูรายละเอียด';
+      return `<tr><td class="p-2 border font-bold">${escapeHtml(r.docNo||'Draft')}<br><span class="text-xs text-gray-500 font-normal">${escapeHtml(r.date||'')}</span></td><td class="p-2 border">${escapeHtml(r.proj||'')}</td><td class="p-2 border">${escapeHtml(r.type||'')}</td><td class="p-2 border text-center"><span class="font-bold">${ynSummary(r)}</span></td><td class="p-2 border text-center">${statusLabel(r.status)}<br><span class="text-xs text-gray-500">${shouldShowStockCol(r.type,r) ? ("Stock: "+ynSummary(r)) : ""}</span></td><td class="p-2 border text-center"><button onclick="viewOrEditDoc('${escapeJs(r.id)}')" class="text-blue-600 underline font-bold">${btnText}</button></td></tr>`;
+    }).join('');
+  }
+  html += `</tbody></table>`;
+  document.getElementById('histContent').innerHTML = html;
+}
+
+function viewOrEditDoc(id){
+  const r = DB.records.find(x=>x.id === id);
+  currentViewRecord = r;
+  if(!r) return alert('ไม่พบเอกสาร');
+
+  currentEditId = id;
+  isViewMode = !(r.status === 'draft' && r.user === currentUser.name);
+
+  document.getElementById('docType').value = r.type; changeDocType();
+  document.getElementById('docProject').value = r.proj;
+  document.getElementById('docDate').value = r.date;
+  document.getElementById('docNo').value = r.docNo || '';
+
+  if(document.getElementById('exDriver') && r.exDriver) document.getElementById('exDriver').value = r.exDriver;
+  if(document.getElementById('exPlate') && r.exPlate) document.getElementById('exPlate').value = r.exPlate;
+  if(document.getElementById('exReceiver') && r.exReceiver) document.getElementById('exReceiver').value = r.exReceiver;
+
+  document.getElementById('tableBody').innerHTML = '';
+  (r.items||[]).forEach(i => addRow(i));
+  setTimeout(()=>{ document.querySelectorAll('textarea.item, textarea.note').forEach(ta=>autoResize(ta)); }, 10);
+
+  document.getElementById('btnCancel').classList.remove('hidden');
+  if(isViewMode){
+    document.getElementById('btnSave').classList.add('hidden');
+    document.getElementById('btnDraft').classList.add('hidden');
+    const addBtn = document.querySelector('button[onclick="addRow()"]');
+    if(addBtn) addBtn.classList.add('hidden');
+    document.getElementById('btnCancel').innerText = 'ปิดหน้าต่าง';
+  }else{
+    document.getElementById('btnSave').classList.remove('hidden');
+    document.getElementById('btnDraft').classList.remove('hidden');
+    const addBtn = document.querySelector('button[onclick="addRow()"]');
+    if(addBtn) addBtn.classList.remove('hidden');
+    document.getElementById('btnCancel').innerText = 'ยกเลิก/ปิด';
+  }
+
+  closeModal('genericModal');
+}
+
+function cancelEdit(){ location.reload(); }
+
+// ================= FACTORY WORKFLOW =================
+function openFactory(){
+  const tb = `<button onclick="renderFactoryCheck()" class="bg-orange-200 px-3 py-1 rounded font-bold hover:bg-orange-300">✅ เช็คสต๊อก (Y/N)</button><button onclick="renderFactoryPrice()" class="bg-orange-200 px-3 py-1 rounded font-bold hover:bg-orange-300">💰 ใส่ราคา (หลังอนุมัติ)</button>`;
+  openModal('📑 Factory Dashboard', '<div id="facContent"></div>', 'bg-orange-600', tb);
+  renderFactoryCheck();
+}
+
+function renderFactoryCheck(){
+  const reqs = DB.records.filter(r => r.status === 'factory_check');
+  let html = `<div class="text-sm text-gray-600 mb-2">* ต้องเลือก Y/N ให้ครบทุกบรรทัดก่อนส่งให้ผู้อนุมัติ</div><table class="w-full text-sm border"><thead class="bg-orange-50"><tr><th class="p-2 border">เอกสาร</th><th class="p-2 border">โครงการ</th><th class="p-2 border">รายการ</th><th class="p-2 border text-center">จำนวน</th><th class="p-2 border text-center">Stock Y/N</th><th class="p-2 border text-center">ส่งอนุมัติ</th></tr></thead><tbody>`;
+  if(reqs.length===0) html += `<tr><td colspan="6" class="p-4 text-center text-gray-500">ไม่มีรายการรอเช็คสต๊อก</td></tr>`;
+  else {
+    reqs.forEach(r=>{
+      (r.items||[]).forEach((it,idx)=>{
+        const yn = it.stockYN || '';
+        html += `<tr><td class="p-2 border font-bold text-red-600">${idx===0?(escapeHtml(r.docNo||'Draft')):''}</td><td class="p-2 border">${idx===0?escapeHtml(r.proj||''):''}</td><td class="p-2 border">${escapeHtml(it.name||'')}</td><td class="p-2 border text-center">${escapeHtml(it.qty||'')} ${escapeHtml(it.unit||'')}</td><td class="p-2 border text-center"><select class="border p-1 rounded" id="yn_${r.id}_${idx}"><option value="" ${yn===''?'selected':''}>-</option><option value="Y" ${yn==='Y'?'selected':''}>Y</option><option value="N" ${yn==='N'?'selected':''}>N</option></select></td><td class="p-2 border text-center">${idx===0?`<button class="bg-blue-600 text-white px-2 py-1 rounded text-xs font-bold" onclick="factorySendToManager('${escapeJs(r.id)}')">ส่งให้ผู้อนุมัติ</button>`:''}</td></tr>`;
+      });
+    });
+  }
+  html += `</tbody></table>`;
+  document.getElementById('facContent').innerHTML = html;
+}
+
+async function factorySendToManager(id){
+  const r = DB.records.find(x=>x.id===id);
+  if(!r) return alert('ไม่พบเอกสาร');
+
+  r.items.forEach((it,idx)=>{
+    const sel = document.getElementById(`yn_${id}_${idx}`);
+    it.stockYN = sel ? sel.value : '';
+  });
+
+  const incomplete = r.items.some(it => !['Y','N'].includes(it.stockYN));
+  if(incomplete) return alert('กรุณาเช็ค Stock Y/N ให้ครบทุกบรรทัดก่อน');
+
+  // ถ้า Y เติมราคา final จากสต๊อกไว้ก่อน
+  r.items.forEach(it=>{
+    if(it.stockYN==='Y') it.priceFinal = getStockPriceByName(it.name);
+  });
+
+  r.status = 'manager_review';
+  saveLocal();
+  const res = await syncAfterChange('records');
+  if(!res?.success) alert('ส่งต่อ (Local) แล้ว แต่ยังไม่ sync: ' + (res?.error||''));
+  renderFactoryCheck();
+}
+
+function renderFactoryPrice(){
+  const reqs = DB.records.filter(r => r.status === 'factory_price');
+  let html = `<div class="text-sm text-gray-600 mb-2">* รายการ Y ใช้ราคาสต๊อกอัตโนมัติ / รายการ N ให้กรอกราคา</div><table class="w-full text-sm border"><thead class="bg-orange-50"><tr><th class="p-2 border">เอกสาร</th><th class="p-2 border">โครงการ</th><th class="p-2 border">รายการ</th><th class="p-2 border text-center">Y/N</th><th class="p-2 border text-center">ราคา</th><th class="p-2 border text-center">บันทึก</th></tr></thead><tbody>`;
+  if(reqs.length===0) html += `<tr><td colspan="6" class="p-4 text-center text-gray-500">ไม่มีรายการรอใส่ราคา</td></tr>`;
+  else {
+    reqs.forEach(r=>{
+      r.items.forEach((it,idx)=>{
+        const autoPrice = (it.stockYN === 'Y') ? getStockPriceByName(it.name) : '';
+        const val = (it.stockYN === 'Y') ? autoPrice : (it.priceFinal || '');
+        const ro = (it.stockYN === 'Y') ? 'readonly' : '';
+        html += `<tr><td class="p-2 border font-bold text-red-600">${idx===0?escapeHtml(r.docNo||'Draft'):''}</td><td class="p-2 border">${idx===0?escapeHtml(r.proj||''):''}</td><td class="p-2 border">${escapeHtml(it.name||'')}</td><td class="p-2 border text-center">${escapeHtml(it.stockYN||'')}</td><td class="p-2 border text-center"><input type="number" class="border p-1 rounded w-28 text-center ${ro?'bg-gray-100':''}" id="pf_${r.id}_${idx}" value="${val}" ${ro}></td><td class="p-2 border text-center">${idx===0?`<button class="bg-green-600 text-white px-2 py-1 rounded text-xs font-bold" onclick="factoryConfirmPrice('${escapeJs(r.id)}')">ยืนยันราคา</button>`:''}</td></tr>`;
+      });
+    });
+  }
+  html += `</tbody></table>`;
+  document.getElementById('facContent').innerHTML = html;
+}
+
+async function factoryConfirmPrice(id){
+  const r = DB.records.find(x=>x.id===id);
+  if(!r) return alert('ไม่พบเอกสาร');
+
+  for(let idx=0; idx<r.items.length; idx++){
+    const it = r.items[idx];
+    if(it.stockYN === 'Y'){
+      it.priceFinal = getStockPriceByName(it.name);
+    } else if(it.stockYN === 'N'){
+      const input = document.getElementById(`pf_${id}_${idx}`);
+      const v = Number(input?.value||0);
+      if(!v) return alert('กรุณากรอกราคาให้รายการ N ให้ครบ');
+      it.priceFinal = v;
+    } else {
+      return alert('พบรายการที่ยังไม่กำหนด Y/N กรุณากลับไปเช็คสต๊อกก่อน');
+    }
+  }
+
+  r.status = 'delivered';
+  saveLocal();
+  const res = await syncAfterChange('records');
+  if(!res?.success) alert('ยืนยันราคา (Local) แล้ว แต่ยังไม่ sync: ' + (res?.error||''));
+  renderFactoryPrice();
+}
+
+// ================= MANAGER WORKFLOW =================
+function openManager(){
+  const reqs = DB.records.filter(r => r.status === 'manager_review');
+  let html = `<table class="w-full text-sm border"><thead class="bg-blue-100"><tr><th class="p-2 border">เอกสาร</th><th class="p-2 border">โครงการ</th><th class="p-2 border">ประเภท</th><th class="p-2 border text-center">Stock Y/N</th><th class="p-2 border text-center">จัดการ</th></tr></thead><tbody>`;
+  if(reqs.length===0) html += `<tr><td colspan="5" class="p-4 text-center text-gray-500">ไม่มีรายการรออนุมัติ</td></tr>`;
+  else {
+    html += reqs.map(r=>`<tr><td class="p-2 border font-bold text-red-600">${escapeHtml(r.docNo||'')}</td><td class="p-2 border">${escapeHtml(r.proj||'')}</td><td class="p-2 border">${escapeHtml(r.type||'')}</td><td class="p-2 border text-center"><button onclick="viewOrEditDoc('${escapeJs(r.id)}')" class="text-blue-600 underline mr-2">ดูรายละเอียด</button><button onclick="approveDoc('${escapeJs(r.id)}')" class="bg-green-500 text-white px-3 py-1 rounded font-bold shadow">อนุมัติ</button></td></tr>`).join('');
+  }
+  html += `</tbody></table>`;
+  openModal('✅ อนุมัติงาน (Manager)', html, 'bg-blue-600');
+}
+
+async function approveDoc(id){
+  const r = DB.records.find(x=>x.id===id);
+  if(!r) return alert('ไม่พบเอกสาร');
+
+  r.items.forEach(it=>{ if(it.stockYN === 'Y') it.priceFinal = getStockPriceByName(it.name); });
+  r.status = 'factory_price';
+
+  saveLocal();
+  const res = await syncAfterChange('records');
+  if(!res?.success) alert('อนุมัติ (Local) แล้ว แต่ยังไม่ sync: ' + (res?.error||''));
+  openManager();
+}
+
+// ================= STOCK =================
+function openStock(){
+  const isFac = ['admin','admin factory'].includes((currentUser?.role||'').toLowerCase());
+  let tb = '';
+  if(isFac){
+    tb = `<div class="grid grid-cols-2 sm:grid-cols-4 gap-2 w-full text-sm"><input type="text" id="sCode" placeholder="รหัสสินค้า" class="border p-1 rounded"><input type="text" id="sName" placeholder="ชื่อรายการ" class="border p-1 rounded"><input type="text" id="sSize" placeholder="ขนาด" class="border p-1 rounded"><input type="text" id="sUnit" placeholder="หน่วย" class="border p-1 rounded"><input type="number" id="sPrice" placeholder="ราคา/ต้นทุน" class="border p-1 rounded"><input type="text" id="sSup" placeholder="Supplier" class="border p-1 rounded"><input type="text" id="sImg" placeholder="Link รูปภาพ" class="border p-1 rounded col-span-2"><button onclick="saveStock()" class="bg-amber-600 text-white px-2 py-1 rounded font-bold col-span-2 sm:col-span-4">บันทึก/เพิ่มสต๊อก</button></div>`;
+  }
+  openModal('📦 ฐานข้อมูลสต๊อกวัสดุ', '<div id="stockContent"></div>', 'bg-amber-600', tb);
+  renderStock();
+}
+
+function renderStock(){
+  const isFac = ['admin','admin factory'].includes((currentUser?.role||'').toLowerCase());
+  let html = `<table class="w-full text-sm border"><thead class="bg-gray-200"><tr><th class="p-2 border w-16">รูป</th><th class="p-2 border">รหัส</th><th class="p-2 border">ชื่อรายการ</th><th class="p-2 border">ขนาด</th><th class="p-2 border">หน่วย</th><th class="p-2 border">Supplier</th><th class="p-2 border">ราคา</th><th class="p-2 border text-center">จัดการ</th></tr></thead><tbody>`;
+  html += DB.stock.map((s,i)=>`<tr><td class="p-2 border text-center">${s.img ? `<a href="${s.img}" target="_blank" rel="noopener"><img src="${s.img}" class="w-10 h-10 object-cover mx-auto rounded"/></a>` : '-'}</td><td class="p-2 border">${escapeHtml(s.code||'-')}</td><td class="p-2 border font-bold">${escapeHtml(s.name||'')}</td><td class="p-2 border">${escapeHtml(s.size||'-')}</td><td class="p-2 border">${escapeHtml(s.unit||'-')}</td><td class="p-2 border">${escapeHtml(s.supplier||'-')}</td><td class="p-2 border text-right">${Number(s.price||0).toLocaleString()}</td><td class="p-2 border text-center"><button onclick="addFromStock('${escapeJs(s.name)}','${escapeJs(s.unit||'')}',${Number(s.price||0)})" class="text-blue-600 font-bold bg-blue-50 px-2 py-1 rounded text-xs mb-1 block w-full">เพิ่มลงใบเบิก</button>${isFac?`<button onclick="delStock(${i})" class="text-red-500 font-bold bg-red-50 px-2 py-1 rounded text-xs w-full">ลบ</button>`:''}</td></tr>`).join('');
+  html += `</tbody></table>`;
+  document.getElementById('stockContent').innerHTML = html;
+}
+
+async function saveStock(){
+  const name = document.getElementById('sName')?.value?.trim();
+  if(!name) return alert('กรอกชื่อรายการ');
+  DB.stock.push({
+    code: (document.getElementById('sCode')?.value||'').trim(),
+    name,
+    size: (document.getElementById('sSize')?.value||'').trim(),
+    unit: (document.getElementById('sUnit')?.value||'').trim(),
+    price: Number(document.getElementById('sPrice')?.value||0),
+    supplier: (document.getElementById('sSup')?.value||'').trim(),
+    img: (document.getElementById('sImg')?.value||'').trim(),
+  });
+  saveLocal();
+  const res = await syncAfterChange('stock');
+  if(res?.success) renderStock();
+  else alert('บันทึกสต๊อกไม่สำเร็จ: ' + (res?.error||''));
+}
+
+async function delStock(i){
+  if(!confirm('ลบรายการสต๊อกนี้?')) return;
+  DB.stock.splice(i,1);
+  saveLocal();
+  const res = await syncAfterChange('stock');
+  if(res?.success) renderStock();
+}
+
+function addFromStock(name, unit, price){
+  addRow({name, unit, price});
+  closeModal('genericModal');
+}
+
+// ================= EMP =================
+function openEmp(){
+  const tb = `<div class="flex gap-2 w-full"><input type="text" id="eName" placeholder="ชื่อพนักงาน" class="border p-1 rounded flex-1"><input type="number" id="eWage" placeholder="ค่าแรง" class="border p-1 rounded w-24"><button onclick="saveEmp()" class="bg-teal-600 text-white px-2 py-1 rounded font-bold">เพิ่ม</button></div>`;
+  openModal('👥 ฐานข้อมูลพนักงาน', '<div id="empContent"></div>', 'bg-teal-600', tb);
+  renderEmp();
+}
+function renderEmp(){
+  let html = `<table class="w-full text-sm border"><thead class="bg-gray-200"><tr><th class="p-2 border">ชื่อพนักงาน</th><th class="p-2 border">ค่าแรง</th><th class="p-2 border text-center">จัดการ</th></tr></thead><tbody>`;
+  html += DB.emp.map((e,i)=>`<tr><td class="p-2 border">${escapeHtml(e.name)}</td><td class="p-2 border text-right">${Number(e.wage||0).toLocaleString()}</td><td class="p-2 border text-center"><button onclick="delEmp(${i})" class="text-red-500 font-bold">ลบ</button></td></tr>`).join('');
+  html += `</tbody></table>`;
+  document.getElementById('empContent').innerHTML = html;
+}
+async function saveEmp(){
+  const name = document.getElementById('eName')?.value?.trim();
+  if(!name) return alert('กรอกชื่อพนักงาน');
+  const wage = Number(document.getElementById('eWage')?.value||0);
+  DB.emp.push({name, wage});
+  saveLocal();
+  const res = await syncAfterChange('emp');
+  if(res?.success) renderEmp();
+  else alert('บันทึกพนักงานไม่สำเร็จ: ' + (res?.error||''));
+}
+async function delEmp(i){
+  if(!confirm('ลบพนักงานนี้?')) return;
+  DB.emp.splice(i,1);
+  saveLocal();
+  const res = await syncAfterChange('emp');
+  if(res?.success) renderEmp();
+}
+
+// ================= SUMMARY =================
+function openSummary(){
+  const role = (currentUser?.role||'').toLowerCase();
+  let sum = {};
+  DB.records.filter(r => r.status === 'delivered').forEach(r=>{
+    if(role === 'project site' && r.proj !== currentUser.proj) return;
+    if(!sum[r.proj]) sum[r.proj] = { mat:0, labor:0, veh:0 };
+
+    (r.items||[]).forEach(i=>{
+      const qty = Number(i.qty||0);
+      const priceUsed = i.stockYN === 'Y' ? getStockPriceByName(i.name) : Number(i.priceFinal||0);
+      const cost = qty * priceUsed;
+      if(r.type === 'ใบเบิกวัสดุ' || r.type === 'ใบจัดส่งวัสดุ') sum[r.proj].mat += cost;
+      else if(r.type === 'ใบเบิกคนงาน') sum[r.proj].labor += cost;
+      else if(r.type === 'ใบเบิกรถ') sum[r.proj].veh += cost;
+    });
+  });
+
+  let html = `<table class="w-full text-sm border"><thead class="bg-indigo-100"><tr><th class="p-2 border">โครงการ</th><th class="p-2 border text-right">ค่าวัสดุ (฿)</th><th class="p-2 border text-right">ค่าแรง (฿)</th><th class="p-2 border text-right">ค่ารถ (฿)</th><th class="p-2 border text-right font-bold">รวม (฿)</th></tr></thead><tbody>`;
+  const keys = Object.keys(sum);
+  if(keys.length === 0) html += `<tr><td colspan="5" class="text-center p-4 text-gray-500">ยังไม่มีข้อมูลต้นทุนที่จัดส่งแล้ว</td></tr>`;
+  else {
+    keys.forEach(k=>{
+      const total = sum[k].mat + sum[k].labor + sum[k].veh;
+      html += `<tr><td class="p-2 border font-bold">${escapeHtml(k)}</td><td class="p-2 border text-right text-amber-700">${sum[k].mat.toLocaleString()}</td><td class="p-2 border text-right text-teal-700">${sum[k].labor.toLocaleString()}</td><td class="p-2 border text-right text-blue-700">${sum[k].veh.toLocaleString()}</td><td class="p-2 border text-right font-bold text-red-600">${total.toLocaleString()}</td></tr>`;
+    });
+  }
+  html += `</tbody></table>`;
+  openModal('📊 สรุปต้นทุนโครงการ', html, 'bg-indigo-600');
+}
+
+// ================= MISC =================
+function openPullModal(){ alert('ฟังก์ชันดึงข้อมูลใบเบิก (Pull) ยังไม่ได้เปิดใช้งานในเวอร์ชันนี้'); }
+window.addEventListener('beforeprint', ()=>{ document.querySelectorAll('textarea').forEach(ta=>autoResize(ta)); });
+
+// ================= START =================
+document.addEventListener('DOMContentLoaded', async ()=>{
+  setLogo();
+  initDB();
+  document.getElementById('docDate').value = new Date().toLocaleDateString('th-TH');
+  await syncFromBackend();
+  currentUser = JSON.parse(localStorage.getItem('kos_active_user'));
+  if(!currentUser) document.getElementById('loginOverlay').classList.remove('hidden');
+  else setupUI();
+});
+</script>
+
+</body>
 </html>
+
 
