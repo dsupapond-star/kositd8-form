@@ -38,7 +38,21 @@
       .input-line { border-bottom: 1px dotted #000 !important; }
       table input, table textarea { border: none !important; }
     }
-  </style>
+  
+
+/* ===== HEADER ALIGN (SCREEN + PRINT): Logo ขวา / หัวข้อกึ่งกลางทั้งหน้า ===== */
+@media (min-width: 640px){
+  #topHeader{ display:grid !important; grid-template-columns: 1fr auto 1fr !important; align-items:center !important; }
+  #leftBlock{ grid-column: 1 !important; justify-self: start !important; }
+  #titleBlock{ grid-column: 2 !important; justify-self: center !important; width:auto !important; }
+  #logo-root{ grid-column: 3 !important; justify-self: end !important; width:auto !important; display:flex !important; justify-content:flex-end !important; }
+}
+@media print{
+  #topHeader{ display:grid !important; grid-template-columns: 1fr auto 1fr !important; align-items:center !important; }
+  #titleBlock{ grid-column: 2 !important; justify-self: center !important; width:auto !important; }
+  #logo-root{ grid-column: 3 !important; justify-self: end !important; width:auto !important; display:flex !important; justify-content:flex-end !important; }
+}
+
 </head>
 
 <body class="p-2 sm:p-6">
@@ -79,11 +93,11 @@
 
   <!-- Main Form -->
   <div class="doc-container relative" id="printableArea">
-    <div class="flex flex-col sm:flex-row justify-between items-center mb-6 gap-4">
-      <div class="w-full sm:w-1/4 no-print">
+    <div class="flex flex-col sm:flex-row justify-between items-center mb-6 gap-4" id="topHeader">
+      <div class="w-full sm:w-1/4 no-print" id="leftBlock">
         <button id="btnPull" onclick="openPullModal()" class="hidden bg-blue-100 text-blue-700 border border-blue-500 px-4 py-2 rounded font-bold text-sm w-full">📥 ดึงข้อมูลใบเบิก</button>
       </div>
-      <div class="w-full sm:w-2/4 flex justify-center flex-col items-center">
+      <div class="w-full flex justify-center flex-col items-center" id="titleBlock">
         <select id="docType" onchange="changeDocType()" class="text-3xl font-bold text-center border-b-2 border-gray-300 pb-1 w-full focus:border-blue-500 no-print">
           <option value="ใบเบิกวัสดุ">ใบเบิกวัสดุ</option>
           <option value="ใบเบิกรถ">ใบเบิกรถ</option>
@@ -215,6 +229,7 @@ let DB = { users:[], stock:[], emp:[], records:[] };
 let currentUser = null;
 let currentEditId = null;
 let currentPulledReqId = null;
+let currentViewRecord = null;
 let currentAutocompleteInput = null;
 let isViewMode = false;
 
@@ -337,6 +352,26 @@ function openModal(title, contentHtml, colorClass='bg-gray-800', toolbarHtml='')
 function closeModal(id){ document.getElementById(id).classList.add('hidden'); }
 
 // ================= WORKFLOW HELPERS =================
+
+
+// ================= STOCK Y/N DISPLAY =================
+function ynSummary(record){
+  const items = record?.items || [];
+  let y=0,n=0,na=0;
+  items.forEach(it=>{
+    const v = String(it.stockYN||'').toUpperCase();
+    if(v==='Y') y++; else if(v==='N') n++; else na++;
+  });
+  if(items.length===0) return '';
+  return `Y=${y} / N=${n}` + (na?` / - ${na}`:'');
+}
+function shouldShowStockCol(type, record){
+  const t = String(type||'');
+  const okType = (t==='ใบเบิกวัสดุ' || t==='ใบจัดส่งวัสดุ');
+  const st = String(record?.status||'');
+  return okType && ['manager_review','factory_price','delivered'].includes(st);
+}
+
 function getStockPriceByName(itemName){
   const s = DB.stock.find(x => (x.name||'').trim() === (itemName||'').trim());
   return s ? Number(s.price||0) : 0;
@@ -428,6 +463,7 @@ function setupUI(){
 // ================= FORM LOGIC =================
 function changeDocType(){
   const type = document.getElementById('docType').value;
+  const showStockYN = shouldShowStockCol(type, currentViewRecord);
   document.getElementById('printDocTitle').innerText = type;
   document.getElementById('btnPull').classList.toggle('hidden', type !== 'ใบจัดส่งวัสดุ' && type !== 'ใบส่งคืนวัสดุ');
 
@@ -465,6 +501,7 @@ function changeDocType(){
 
 function addRow(data = {}){
   const type = document.getElementById('docType').value;
+  const showStockYN = shouldShowStockCol(type, currentViewRecord);
   const isDel = (type === 'ใบจัดส่งวัสดุ');
   const ro = isViewMode ? 'readonly' : '';
 
@@ -633,7 +670,7 @@ function renderHistory(){
     html += list.map(r=>{
       const canEdit = (r.status === 'draft' && r.user === currentUser.name);
       const btnText = canEdit ? 'แก้ไข' : 'ดูรายละเอียด';
-      return `<tr><td class="p-2 border font-bold">${escapeHtml(r.docNo||'Draft')}<br><span class="text-xs text-gray-500 font-normal">${escapeHtml(r.date||'')}</span></td><td class="p-2 border">${escapeHtml(r.proj||'')}</td><td class="p-2 border">${escapeHtml(r.type||'')}</td><td class="p-2 border text-center">${statusLabel(r.status)}</td><td class="p-2 border text-center"><button onclick="viewOrEditDoc('${escapeJs(r.id)}')" class="text-blue-600 underline font-bold">${btnText}</button></td></tr>`;
+      return `<tr><td class="p-2 border font-bold">${escapeHtml(r.docNo||'Draft')}<br><span class="text-xs text-gray-500 font-normal">${escapeHtml(r.date||'')}</span></td><td class="p-2 border">${escapeHtml(r.proj||'')}</td><td class="p-2 border">${escapeHtml(r.type||'')}</td><td class="p-2 border text-center"><span class="font-bold">${ynSummary(r)}</span></td><td class="p-2 border text-center">${statusLabel(r.status)}<br><span class="text-xs text-gray-500">${shouldShowStockCol(r.type,r) ? ("Stock: "+ynSummary(r)) : ""}</span></td><td class="p-2 border text-center"><button onclick="viewOrEditDoc('${escapeJs(r.id)}')" class="text-blue-600 underline font-bold">${btnText}</button></td></tr>`;
     }).join('');
   }
   html += `</tbody></table>`;
@@ -642,6 +679,7 @@ function renderHistory(){
 
 function viewOrEditDoc(id){
   const r = DB.records.find(x=>x.id === id);
+  currentViewRecord = r;
   if(!r) return alert('ไม่พบเอกสาร');
 
   currentEditId = id;
@@ -773,8 +811,8 @@ async function factoryConfirmPrice(id){
 // ================= MANAGER WORKFLOW =================
 function openManager(){
   const reqs = DB.records.filter(r => r.status === 'manager_review');
-  let html = `<table class="w-full text-sm border"><thead class="bg-blue-100"><tr><th class="p-2 border">เอกสาร</th><th class="p-2 border">โครงการ</th><th class="p-2 border">ประเภท</th><th class="p-2 border text-center">จัดการ</th></tr></thead><tbody>`;
-  if(reqs.length===0) html += `<tr><td colspan="4" class="p-4 text-center text-gray-500">ไม่มีรายการรออนุมัติ</td></tr>`;
+  let html = `<table class="w-full text-sm border"><thead class="bg-blue-100"><tr><th class="p-2 border">เอกสาร</th><th class="p-2 border">โครงการ</th><th class="p-2 border">ประเภท</th><th class="p-2 border text-center">Stock Y/N</th><th class="p-2 border text-center">จัดการ</th></tr></thead><tbody>`;
+  if(reqs.length===0) html += `<tr><td colspan="5" class="p-4 text-center text-gray-500">ไม่มีรายการรออนุมัติ</td></tr>`;
   else {
     html += reqs.map(r=>`<tr><td class="p-2 border font-bold text-red-600">${escapeHtml(r.docNo||'')}</td><td class="p-2 border">${escapeHtml(r.proj||'')}</td><td class="p-2 border">${escapeHtml(r.type||'')}</td><td class="p-2 border text-center"><button onclick="viewOrEditDoc('${escapeJs(r.id)}')" class="text-blue-600 underline mr-2">ดูรายละเอียด</button><button onclick="approveDoc('${escapeJs(r.id)}')" class="bg-green-500 text-white px-3 py-1 rounded font-bold shadow">อนุมัติ</button></td></tr>`).join('');
   }
@@ -923,3 +961,4 @@ document.addEventListener('DOMContentLoaded', async ()=>{
 
 </body>
 </html>
+
