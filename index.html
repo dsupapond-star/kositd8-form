@@ -83,7 +83,7 @@
       <input type="text" id="loginUser" placeholder="Username" class="w-full border-2 p-3 rounded-lg mb-3 text-center focus:border-blue-500">
       <input type="password" id="loginPass" placeholder="Password" class="w-full border-2 p-3 rounded-lg mb-4 text-center focus:border-blue-500">
       <button onclick="doLogin()" class="w-full bg-blue-600 text-white font-bold py-3 rounded-lg hover:bg-blue-700">เข้าสู่ระบบ</button>
-      <button type=\"button\" onclick=\"openSignup()\" class=\"w-full mt-2 bg-green-600 text-white font-bold py-3 rounded-lg hover:bg-green-700\">สมัครสมาชิก</button>
+      <button type="button" onclick="openSignup()" class="w-full mt-2 bg-green-600 text-white font-bold py-3 rounded-lg hover:bg-green-700">สมัครสมาชิก</button>
       <div class="mt-4 text-xs text-gray-500 text-left bg-gray-50 p-2 rounded">
         <p><b>ทดสอบระบบ (รหัสผ่าน 123 ทุกอัน):</b></p>
         <p>admin (ผู้ดูแลระบบ) | factory (ฝ่ายโรงงาน)</p>
@@ -256,9 +256,9 @@ async function doSignup(){
   if(name.length < 2) return alert('กรุณากรอกชื่อ-นามสกุล');
   if(DB.users.some(u => u.user === user)) return alert('Username นี้ถูกใช้แล้ว');
   const passHash = await sha256(pass);
-  DB.users.push({ user, passHash, name, role:'user', proj, approved:false, status:'pending', requestedAt: new Date().toISOString() });
+  DB.users.push({ user, passHash, name, role:'user', proj });
   saveLocal();
-  alert('สมัครสมาชิกสำเร็จ ✅ รอให้ Admin อนุมัติ ก่อนจึงจะเข้าสู่ระบบได้');
+  alert('สมัครสมาชิกสำเร็จ ✅ กรุณาเข้าสู่ระบบ');
   closeSignup();
 }
 
@@ -323,17 +323,37 @@ let currentUser = null;
 let currentEditId = null;
 let currentPulledReqId = null;
 let currentViewRecord = null;
+// ===== Factory Active Document (ใบเบิกที่เลือกอยู่) =====
+let factoryActiveId = null;
+
+function setFactoryActive(id){
+  factoryActiveId = id;
+}
+
+// ปุ่ม ➕ บน toolbar ในหน้า Factory จะเรียกตัวนี้
+function factoryToolbarAddItem(){
+  if(!hasPerm('factory')) return alert('สิทธิ์ไม่เพียงพอ');
+
+  // ถ้ายังไม่เลือกใบ ให้เลือกใบแรกในคิว factory_check
+  const reqs = DB.records.filter(r => r.status === 'factory_check');
+  if(!factoryActiveId){
+    if(reqs.length === 0) return alert('ไม่มีใบเบิกรอเช็คสต๊อก');
+    factoryActiveId = reqs[0].id;
+  }
+  factoryAddItem(factoryActiveId);
+}
+``
 let currentAutocompleteInput = null;
 let isViewMode = false;
 
 function initDB(){
   if(!localStorage.getItem('kos_users')){
     localStorage.setItem('kos_users', JSON.stringify([
-      {user:'admin', pass:'123', name:'ผู้ดูแลระบบ', role:'admin', proj:'', approved:true, status:'active'},
-      {user:'factory', pass:'123', name:'ฝ่ายโรงงาน', role:'admin factory', proj:'', approved:true, status:'active'},
-      {user:'manager', pass:'123', name:'ผู้จัดการ', role:'manager', proj:'', approved:true, status:'active'},
-      {user:'site', pass:'123', name:'วิศวกรไซต์ A', role:'project site', proj:'โครงการ A', approved:true, status:'active'},
-      {user:'user', pass:'123', name:'ช่างทั่วไป A', role:'user', proj:'โครงการ A', approved:true, status:'active'}
+      {user:'admin', pass:'123', name:'ผู้ดูแลระบบ', role:'admin', proj:''},
+      {user:'factory', pass:'123', name:'ฝ่ายโรงงาน', role:'admin factory', proj:''},
+      {user:'manager', pass:'123', name:'ผู้จัดการ', role:'manager', proj:''},
+      {user:'site', pass:'123', name:'วิศวกรไซต์ A', role:'project site', proj:'โครงการ A'},
+      {user:'user', pass:'123', name:'ช่างทั่วไป A', role:'user', proj:'โครงการ A'}
     ]));
     localStorage.setItem('kos_stock', JSON.stringify([
       {code:'M01', name:'ปูนซีเมนต์', size:'50kg', unit:'ถุง', price:120, supplier:'SCG', img:''},
@@ -343,39 +363,6 @@ function initDB(){
     localStorage.setItem('kos_records', JSON.stringify([]));
   }
   DB.users = JSON.parse(localStorage.getItem('kos_users')) || [];
-  
-function defaultPerms(role){
-  const r=String(role||'').toLowerCase().trim();
-  if(r==='admin') return ['*'];
-  if(r==='admin factory') return ['factory','stock','summary','history','delivery','receive','user_admin'];
-  if(r==='factory') return ['factory','stock_view','history','delivery_view'];
-  if(r==='manager') return ['history'];
-  if(r==='project site') return ['create','history','receive','delivery_view'];
-  return ['create','history','receive','delivery_view'];
-}
-function userPerms(u){
-  if(!u) return [];
-  const role = String(u.role||'').toLowerCase().trim();
-  if(role==='admin') return ['*'];
-  const base = defaultPerms(role);
-  const perms = u.perms;
-  if(!Array.isArray(perms) || perms.length===0) return base;
-  return perms;
-}
-function hasPerm(p){
-  if(!currentUser) return false;
-  const perms=userPerms(currentUser);
-  if(perms.includes('*')) return true;
-  return perms.includes(p);
-}
-// migrate user approval fields
-  DB.users = (DB.users||[]).map(u => ({
-    ...u,
-    approved: (u.approved === undefined ? true : u.approved),
-    status: (u.status || (u.approved===false ? 'pending' : 'active'))
-    ,perms: (u.perms || defaultPerms(u.role))
-  }));
-  localStorage.setItem('kos_users', JSON.stringify(DB.users));
   DB.stock = JSON.parse(localStorage.getItem('kos_stock')) || [];
   DB.emp = JSON.parse(localStorage.getItem('kos_emp')) || [];
   DB.records = JSON.parse(localStorage.getItem('kos_records')) || [];
@@ -463,11 +450,6 @@ async function doLogin(){
   const pHash = await sha256(p);
   const user = DB.users.find(x => x.user === u && (x.passHash === pHash || x.pass === p));
   if(user){
-    // block login until approved
-    if(user.approved===false || String(user.status||'').toLowerCase()==='pending'){
-      alert('บัญชียังไม่ถูกอนุมัติ (รอ Admin อนุมัติ)');
-      return;
-    }
     const { passHash, pass, ...safeUser } = user;
     localStorage.setItem('kos_active_user', JSON.stringify(safeUser));
     location.reload();
@@ -479,22 +461,28 @@ function doLogout(){ localStorage.removeItem('kos_active_user'); location.reload
 
 // ================= MODAL =================
 function openModal(title, contentHtml, colorClass='bg-gray-800', toolbarHtml=''){
-  document.getElementById('modalHeader').className = `p-4 border-b flex justify-between items-center rounded-t-xl ${colorClass}`;
+  document.getElementById('modalHeader').className =
+    `p-4 border-b flex justify-between items-center rounded-t-xl ${colorClass}`;
   document.getElementById('modalTitle').innerText = title;
 
-  // ===== Universal Toolbar (always visible in every modal) =====
   const tbEl = document.getElementById('modalToolbar');
   tbEl.classList.remove('hidden');
   tbEl.innerHTML = `
     <div class="flex flex-wrap gap-2 items-center w-full">
       <div class="flex items-center gap-2 flex-1 min-w-[220px]">
         <span class="text-xs font-bold text-gray-600">🔎</span>
-        <input id="modalSearch" placeholder="ค้นหาในหน้าต่างนี้..." class="flex-1 border rounded px-2 py-1 text-sm" oninput="modalDoSearch(this.value)" />
+        <input id="modalSearch" placeholder="ค้นหาในหน้าต่างนี้..."
+          class="flex-1 border rounded px-2 py-1 text-sm"
+          oninput="modalDoSearch(this.value)" />
       </div>
-      <button onclick="modalDoRefresh()" class="bg-slate-700 text-white px-3 py-1 rounded font-bold text-sm">🔄 รีเฟรช</button>
-      <button onclick="modalDoExport()" class="bg-emerald-700 text-white px-3 py-1 rounded font-bold text-sm">⬇️ Export</button>
-      <button onclick="modalDoAddEdit()" class="bg-blue-700 text-white px-3 py-1 rounded font-bold text-sm">➕ เพิ่ม/แก้ไข</button>
-      <button onclick="closeModal('genericModal')" class="bg-gray-300 text-gray-800 px-3 py-1 rounded font-bold text-sm">✖ ปิด</button>
+      <button onclick="modalDoRefresh()"
+        class="bg-slate-700 text-white px-3 py-1 rounded font-bold text-sm">🔄 รีเฟรช</button>
+      <button onclick="modalDoExport()"
+        class="bg-emerald-700 text-white px-3 py-1 rounded font-bold text-sm">⬇️ Export</button>
+      <button onclick="modalDoAddEdit()"
+        class="bg-blue-700 text-white px-3 py-1 rounded font-bold text-sm">➕ เพิ่ม/แก้ไข</button>
+      <button onclick="closeModal('genericModal')"
+        class="bg-gray-300 text-gray-800 px-3 py-1 rounded font-bold text-sm">✖ ปิด</button>
     </div>
     ${toolbarHtml || ''}
   `;
@@ -502,20 +490,18 @@ function openModal(title, contentHtml, colorClass='bg-gray-800', toolbarHtml='')
   document.getElementById('modalContent').innerHTML = contentHtml;
   document.getElementById('genericModal').classList.remove('hidden');
 }
-
 // ===== Universal Modal Toolbar Runtime =====
 window.__modalCtx = window.__modalCtx || { reopen:null, export:null, addEdit:null };
 
 function modalSetHandlers(h={}){
-  window.__modalCtx.reopen = h.reopen || window.__modalCtx.reopen;
-  window.__modalCtx.export = h.export || window.__modalCtx.export;
-  window.__modalCtx.addEdit = h.addEdit || window.__modalCtx.addEdit;
+  window.__modalCtx.reopen = h.reopen || null;
+  window.__modalCtx.export = h.export || null;
+  window.__modalCtx.addEdit = h.addEdit || null;
 }
 
 function modalDoRefresh(){
   try{
     if(typeof window.__modalCtx.reopen === 'function') return window.__modalCtx.reopen();
-    // fallback: reload page section
     return location.reload();
   }catch(e){ console.error(e); alert('รีเฟรชไม่สำเร็จ'); }
 }
@@ -523,16 +509,20 @@ function modalDoRefresh(){
 function modalDoExport(){
   try{
     if(typeof window.__modalCtx.export === 'function') return window.__modalCtx.export();
-    // fallback: export first table in modalContent
+
+    // fallback: export ตารางแรกใน modalContent เป็น CSV
     const root = document.getElementById('modalContent');
     const table = root ? root.querySelector('table') : null;
     if(!table){ alert('ไม่พบตารางสำหรับ Export'); return; }
+
     const rows = [];
     table.querySelectorAll('tr').forEach(tr=>{
-      const cols = Array.from(tr.querySelectorAll('th,td')).map(td=>td.innerText.replace(/\s+/g,' ').trim());
+      const cols = Array.from(tr.querySelectorAll('th,td'))
+        .map(td=>td.innerText.replace(/\s+/g,' ').trim());
       if(cols.length) rows.push(cols);
     });
-    const csv = rows.map(r=>r.map(x=>`"${String(x).replace(/\"/g,'\"\"')}"`).join(',')).join('\n');
+
+    const csv = rows.map(r=>r.map(x=>`"${String(x).replace(/"/g,'""')}"`).join(',')).join('\n');
     const blob = new Blob([csv], {type:'text/csv;charset=utf-8;'});
     const a = document.createElement('a');
     a.href = URL.createObjectURL(blob);
@@ -552,7 +542,8 @@ function modalDoSearch(q){
   q = String(q||'').toLowerCase().trim();
   const root = document.getElementById('modalContent');
   if(!root) return;
-  // filter table rows if exist
+
+  // ถ้ามีตาราง -> filter แถว
   const tbodies = root.querySelectorAll('tbody');
   if(tbodies.length){
     tbodies.forEach(tbody=>{
@@ -563,21 +554,13 @@ function modalDoSearch(q){
     });
     return;
   }
-  // fallback: highlight/hide blocks
+
+  // fallback: ซ่อน/โชว์บล็อก
   Array.from(root.children).forEach(el=>{
     const hit = el.innerText.toLowerCase().includes(q);
     el.style.display = q ? (hit ? '' : 'none') : '';
   });
 }
-
-// เพิ่ม/แก้ไข สำหรับหน้า Stock (fallback)
-function openStockEdit(){
-  // ถ้ามีปุ่ม/ฟังก์ชันเพิ่มสต๊อกเดิมให้เรียกตรงนี้
-  const btn = document.querySelector('#modalContent button[data-action="addStock"], #modalContent button#btnAddStock');
-  if(btn){ btn.click(); return; }
-  alert('หน้า Stock: เพิ่ม/แก้ไข (ยังไม่ได้ผูกปุ่มเฉพาะ)');
-}
-
 function closeModal(id){ document.getElementById(id).classList.add('hidden'); }
 
 // ================= WORKFLOW HELPERS =================
@@ -598,8 +581,7 @@ function syncItemsBeforeApprove(){
           price: Number(tr.querySelector('.item')?.dataset?.price || 0),
           stockYN: (tr.querySelector('.stockYN') ? (tr.querySelector('.stockYN').value || tr.querySelector('.stockYN').textContent || '').trim() : ''),
           stockQty: (tr.querySelector('.stockQty') ? tr.querySelector('.stockQty').value : ''),
-          priceFinal: '',
-        recv: ''
+          priceFinal: ''
         });
       });
       currentViewRecord.items = items;
@@ -624,9 +606,8 @@ function shouldShowStockCol(type, record){
   const t = String(type||'');
   const okType = (t==='ใบเบิกวัสดุ' || t==='ใบจัดส่งวัสดุ');
   const st = String(record?.status||'');
-  return okType && ['factory_check','factory_price','delivered'].includes(st);
+  return okType && ['manager_review','factory_price','delivered'].includes(st);
 }
-
 
 function getStockPriceByName(itemName){
   const s = DB.stock.find(x => (x.name||'').trim() === (itemName||'').trim());
@@ -683,161 +664,38 @@ async function syncAfterChange(kind){
 
 // ================= UI SETUP =================
 function setupUI(){
-  if(!currentUser) return;
+  document.getElementById('currUser').innerText = currentUser.name;
+  document.getElementById('roleBadge').innerText = (currentUser.role||'').toUpperCase();
+  document.getElementById('sig1Name').innerText = currentUser.name;
+
+  if(currentUser.proj){
+    document.getElementById('docProject').value = currentUser.proj;
+    document.getElementById('docProject').readOnly = true;
+  }
+
   const role = (currentUser.role||'').toLowerCase();
-  document.getElementById('currUser').innerText = currentUser.name + (currentUser.proj ? ` (${currentUser.proj})` : '');
-  document.getElementById('roleBadge').innerText = role;
-
   let btns = '';
-  if(hasPerm('create')) btns += `<button onclick="location.reload()" class="bg-slate-700 text-white px-3 py-1.5 rounded text-sm font-bold shadow">📝 สร้างเอกสาร</button>`;
-  if(hasPerm('history')) btns += `<button onclick="openHistory()" class="bg-gray-700 text-white px-3 py-1.5 rounded text-sm font-bold shadow">📂 ประวัติ/ติดตาม</button>`;
-  if(hasPerm('factory')) btns += `<button onclick="openFactory()" class="bg-orange-600 text-white px-3 py-1.5 rounded text-sm font-bold shadow">📑 จัดการงาน (Factory)</button>`;
-  if(hasPerm('stock')||hasPerm('stock_view')) btns += `<button onclick="openStock()" class="bg-amber-600 text-white px-3 py-1.5 rounded text-sm font-bold shadow">📦 สต๊อกวัสดุ</button>`;
-  if(hasPerm('summary')) btns += `<button onclick="openSummary()" class="bg-indigo-600 text-white px-3 py-1.5 rounded text-sm font-bold shadow">📊 สรุปต้นทุน</button>`;
-  if(hasPerm('user_admin') && role==='admin') btns += `<button onclick="openUserAdmin()" class="bg-black text-white px-3 py-1.5 rounded text-sm font-bold shadow">👥 ผู้ใช้</button>`;
+  btns += `<button onclick="openStock()" class="bg-amber-600 text-white px-3 py-1.5 rounded text-sm font-bold shadow">📦 สต๊อกวัสดุ</button>`;
 
-  if(!btns){ btns = `<button onclick="openHistory()" class="bg-gray-700 text-white px-3 py-1.5 rounded text-sm font-bold shadow">📂 ประวัติ/ติดตาม</button>`; }
+  if(role === 'admin' || role === 'admin factory'){
+    btns += `<button onclick="openEmp()" class="bg-teal-600 text-white px-3 py-1.5 rounded text-sm font-bold shadow">👥 พนักงาน</button>`;
+    btns += `<button onclick="openFactory()" class="bg-orange-600 text-white px-3 py-1.5 rounded text-sm font-bold shadow">📑 จัดการงาน (Factory)</button>`;
+  }
+  if(role === 'admin' || role === 'manager'){
+    btns += `<button onclick="openManager()" class="bg-blue-600 text-white px-3 py-1.5 rounded text-sm font-bold shadow">✅ อนุมัติงาน (Manager)</button>`;
+  }
+  if(role !== 'user'){
+    btns += `<button onclick="openSummary()" class="bg-indigo-600 text-white px-3 py-1.5 rounded text-sm font-bold shadow">📊 สรุปต้นทุน</button>`;
+  }
+  btns += `<button onclick="openHistory()" class="bg-gray-800 text-white px-3 py-1.5 rounded text-sm font-bold shadow">📂 ประวัติ/ติดตาม</button>`;
   document.getElementById('navButtons').innerHTML = btns;
 
   const docType = document.getElementById('docType');
-  if(!docType) return;
   docType.innerHTML = `<option value="ใบเบิกวัสดุ">ใบเบิกวัสดุ</option><option value="ใบเบิกรถ">ใบเบิกรถ</option><option value="ใบเบิกคนงาน">ใบเบิกคนงาน</option><option value="ใบส่งคืนวัสดุ">ใบส่งคืนวัสดุ</option>`;
-  if(hasPerm('delivery') || hasPerm('delivery_view')) docType.innerHTML += `<option value="ใบจัดส่งวัสดุ">ใบจัดส่งวัสดุ</option>`;
+  if(['admin','admin factory','manager'].includes(role)) docType.innerHTML += `<option value="ใบจัดส่งวัสดุ">ใบจัดส่งวัสดุ</option>`;
 
   changeDocType();
 }
-
-
-// ================= USER APPROVAL (ADMIN) =================
-function openUserAdmin(){
-  if(!currentUser || String(currentUser.role||'').toLowerCase()!=='admin'){
-    return alert('สิทธิ์ไม่เพียงพอ');
-  }
-  renderUserAdmin();
-}
-
-function renderUserAdmin(){
-  const permOptions = [
-    {k:'create',t:'สร้าง/ส่งใบเบิก'},
-    {k:'history',t:'ประวัติ/ติดตาม'},
-    {k:'factory',t:'Factory Dashboard'},
-    {k:'stock',t:'สต๊อกวัสดุ (แก้ไขได้)'},
-    {k:'stock_view',t:'สต๊อกวัสดุ (ดูอย่างเดียว)'},
-    {k:'summary',t:'สรุปต้นทุน'},
-    {k:'delivery',t:'สร้างใบจัดส่งวัสดุ'},
-    {k:'delivery_view',t:'ดูใบจัดส่งวัสดุ'},
-    {k:'receive',t:'กรอกจำนวนรับวัสดุ'},
-    {k:'user_admin',t:'จัดการผู้ใช้'}
-  ];
-
-  const rows = (DB.users||[]).map(u => {
-    const status = (u.status || (u.approved===false ? 'pending' : 'active'));
-    const safeName = escapeHtml(u.name||'');
-    const safeUser = escapeHtml(u.user||'');
-    const safeProj = escapeHtml(u.proj||'');
-    const isPending = String(status).toLowerCase()==='pending' || u.approved===false;
-    const disableSelf = (u.user === 'admin');
-    const perms = (u.perms || defaultPerms(u.role) || []);
-
-    const chk = permOptions.map(p=>{
-      const checked = (perms.includes('*') || perms.includes(p.k)) ? 'checked' : '';
-      return `<label class="mr-2 inline-flex items-center"><input type="checkbox" class="mr-1" ${disableSelf?'disabled':''} ${checked} onchange="toggleUserPerm('${safeUser}','${p.k}',this.checked)"><span class="text-xs">${p.t}</span></label>`;
-    }).join('');
-
-    return `
-      <tr class="border-b align-top">
-        <td class="p-2">${safeName}</td>
-        <td class="p-2 font-mono">${safeUser}</td>
-        <td class="p-2">${safeProj}</td>
-        <td class="p-2"><span class="px-2 py-0.5 rounded text-xs ${isPending?'bg-yellow-100 text-yellow-800':'bg-green-100 text-green-800'}">${escapeHtml(status)}</span></td>
-        <td class="p-2">
-          <select ${disableSelf?'disabled':''} class="border rounded px-2 py-1 text-sm" onchange="setUserRole('${safeUser}', this.value)">
-            ${['user','project site','factory','admin factory','admin'].map(r=>`<option value="${r}" ${r===u.role?'selected':''}>${r}</option>`).join('')}
-          </select>
-        </td>
-        <td class="p-2"><div class="flex flex-wrap">${chk}</div></td>
-        <td class="p-2 text-right">
-          ${isPending ? `
-            <button ${disableSelf?'disabled':''} class="bg-blue-600 text-white px-3 py-1 rounded text-sm font-bold" onclick="approveUser('${safeUser}')">อนุมัติ</button>
-            <button ${disableSelf?'disabled':''} class="bg-red-600 text-white px-3 py-1 rounded text-sm font-bold ml-1" onclick="rejectUser('${safeUser}')">ปฏิเสธ</button>
-          ` : `
-            <button ${disableSelf?'disabled':''} class="bg-gray-200 text-gray-800 px-3 py-1 rounded text-sm font-bold" onclick="deactivateUser('${safeUser}')">ปิดใช้งาน</button>
-          `}
-        </td>
-      </tr>`;
-  }).join('');
-
-  const html = `
-    <div class="text-sm text-gray-600 mb-2">* ปรับบทบาท/สิทธิ์รายคนได้</div>
-    <table class="w-full text-sm border">
-      <thead class="bg-gray-100">
-        <tr>
-          <th class="p-2 text-left">ชื่อ</th>
-          <th class="p-2 text-left">Username</th>
-          <th class="p-2 text-left">โครงการ</th>
-          <th class="p-2 text-left">สถานะ</th>
-          <th class="p-2 text-left">Role</th>
-          <th class="p-2 text-left">สิทธิ์การใช้งาน</th>
-          <th class="p-2 text-right">จัดการ</th>
-        </tr>
-      </thead>
-      <tbody>${rows || `<tr><td colspan="7" class="p-4 text-center text-gray-500">ไม่มีผู้ใช้</td></tr>`}</tbody>
-    </table>`;
-
-  openModal('👥 จัดการผู้ใช้ (Admin)', html, 'bg-gray-800');
-}
-
-async function toggleUserPerm(username, perm, enabled){
-  const u = DB.users.find(x=>x.user===username);
-  if(!u) return;
-  let perms = Array.isArray(u.perms)?u.perms:defaultPerms(u.role);
-  perms = perms.filter(p=>p!=='*');
-  if(enabled){
-    if(!perms.includes(perm)) perms.push(perm);
-  }else{
-    perms = perms.filter(p=>p!==perm);
-  }
-  u.perms = perms;
-  saveLocal();
-  const res = await syncAfterChange('users');
-  if(!res?.success) console.log('perm sync failed', res?.error||'');
-}
-
-
-function findUserIndex(username){
-  return (DB.users||[]).findIndex(u => u.user === username);
-}
-function approveUser(username){
-  const idx = findUserIndex(username);
-  if(idx<0) return;
-  DB.users[idx].approved = true;
-  DB.users[idx].status = 'active';
-  saveLocal();
-  renderUserAdmin();
-}
-function rejectUser(username){
-  const idx = findUserIndex(username);
-  if(idx<0) return;
-  if(!confirm('ปฏิเสธและลบบัญชีนี้ใช่ไหม?')) return;
-  DB.users.splice(idx,1);
-  saveLocal();
-  renderUserAdmin();
-}
-function deactivateUser(username){
-  const idx = findUserIndex(username);
-  if(idx<0) return;
-  DB.users[idx].approved = false;
-  DB.users[idx].status = 'pending';
-  saveLocal();
-  renderUserAdmin();
-}
-function setUserRole(username, role){
-  const idx = findUserIndex(username);
-  if(idx<0) return;
-  DB.users[idx].role = role;
-  saveLocal();
-}
-
 
 // ================= FORM LOGIC =================
 function changeDocType(){
@@ -865,7 +723,7 @@ function changeDocType(){
 
   let th = `<th class="border px-1 py-2 w-[5%]">ลำดับ</th><th class="border px-2 py-2 ${wItem}">รายการ</th><th class="border px-1 py-2 w-[10%]">จำนวน</th>`;
   if(type === 'ใบจัดส่งวัสดุ'){
-    th += `<th class="border px-1 py-2 w-[10%] text-green-300 print:text-black">จัดส่ง</th><th class="border px-1 py-2 w-[10%] text-blue-300 print:text-black">รับจริง</th><th class="border px-1 py-2 w-[10%] text-red-300 print:text-black">คงค้าง</th>`;
+    th += `<th class="border px-1 py-2 w-[10%] text-green-300 print:text-black">จัดส่ง</th><th class="border px-1 py-2 w-[10%] text-red-300 print:text-black">คงค้าง</th>`;
   }
   th += `<th class="border px-1 py-2 w-[10%]">หน่วย</th>`;
   if(showStockYN) th += `<th class="border px-1 py-2 w-[8%] yn-col">Y/N</th><th class="border px-1 py-2 w-[10%] stockqty-col">มีในสต๊อก(ชิ้น)</th>`;
@@ -892,10 +750,7 @@ function addRow(data = {}){
   td += `<td class="border px-1 py-1"><input type="number" class="w-full text-center qty" value="${escapeHtml(data.qty||'')}" ${ro}></td>`;
 
   if(isDel){
-    const canReceive = (hasPerm('receive') && currentViewRecord && currentUser && currentViewRecord.proj===currentUser.proj);
-    const recvRo = canReceive ? "" : "readonly";
     td += `<td class="border px-1 py-1"><input type="number" class="w-full text-center del-qty text-green-600 font-bold" value="${escapeHtml(data.del||'')}" oninput="calcPend(this)" ${ro}></td>`;
-    td += `<td class="border px-1 py-1"><input type="number" class="w-full text-center recv-qty text-blue-600 font-bold" value="${escapeHtml(data.recv||'')}" ${recvRo}></td>`;
     td += `<td class="border px-1 py-1"><input type="number" class="w-full text-center pend-qty text-red-600 font-bold" value="${escapeHtml(data.pend||'')}" readonly></td>`;
   }
 
@@ -1007,10 +862,9 @@ async function saveDoc(status){
         price: Number(tr.querySelector('.item').dataset.price || 0),
         stockYN: (tr.querySelector('.stockYN') ? (tr.querySelector('.stockYN').value || tr.querySelector('.stockYN').textContent || '').trim() : ''),
         stockQty: (tr.querySelector('.stockQty') ? tr.querySelector('.stockQty').value : ''),
-        priceFinal: '',
-        recv: ''
+        priceFinal: ''
       };
-      if(tr.querySelector('.del-qty')){ obj.del = tr.querySelector('.del-qty').value; obj.recv = (tr.querySelector('.recv-qty')?tr.querySelector('.recv-qty').value:''); obj.pend = tr.querySelector('.pend-qty').value; }
+      if(tr.querySelector('.del-qty')){ obj.del = tr.querySelector('.del-qty').value; obj.pend = tr.querySelector('.pend-qty').value; }
       items.push(obj);
     }
   });
@@ -1060,8 +914,6 @@ async function saveDoc(status){
 
 // ================= HISTORY =================
 function openHistory(){
-  modalSetHandlers({reopen:openHistory});
-
   const projs = [...new Set(DB.records.map(r => r.proj))].filter(Boolean);
   let tb = `<label class="font-bold text-sm">โครงการ:</label><select id="histProj" onchange="renderHistory()" class="border p-1 rounded"><option value="ALL">ทั้งหมด</option>${projs.map(p=>`<option value="${escapeHtml(p)}">${escapeHtml(p)}</option>`).join('')}</select>`;
   openModal('📂 ประวัติการทำรายการ / ติดตามสถานะ', '<div id="histContent"></div>', 'bg-gray-800', tb);
@@ -1109,22 +961,6 @@ function viewOrEditDoc(id){
   document.getElementById('tableBody').innerHTML = '';
   (r.items||[]).forEach(i => addRow(i));
   setTimeout(()=>{ document.querySelectorAll('textarea.item, textarea.note').forEach(ta=>autoResize(ta)); }, 10);
-  // cost breakdown per document (material Y/N)
-  try{
-    const ef = document.getElementById('extraFields');
-    if(ef){
-      let show='';
-      if(r.type==='ใบเบิกวัสดุ' || r.type==='ใบจัดส่งวัสดุ'){
-        const matY = (r.items||[]).filter(it=>it.stockYN==='Y').reduce((a,it)=>a + (Number(it.qty||0)*Number(getStockPriceByName(it.name)||0)),0);
-        const matN = (r.items||[]).filter(it=>it.stockYN==='N').reduce((a,it)=>a + (Number(it.qty||0)*Number(it.priceFinal||0)),0);
-        const matT = matY+matN;
-        show = `<div class="flex flex-wrap gap-3 items-center"><span class="font-bold">ต้นทุนวัสดุ:</span><span class="text-amber-700">Y ${matY.toLocaleString()} ฿</span><span class="text-amber-700">N ${matN.toLocaleString()} ฿</span><span class="font-bold text-red-600">รวม ${matT.toLocaleString()} ฿</span></div>`;
-      }
-      if(show){ ef.innerHTML = show; ef.classList.remove('hidden'); }
-      else { ef.classList.add('hidden'); }
-    }
-  }catch(e){}
-
 
   document.getElementById('btnCancel').classList.remove('hidden');
   if(isViewMode){
@@ -1141,89 +977,29 @@ function viewOrEditDoc(id){
     document.getElementById('btnCancel').innerText = 'ยกเลิก/ปิด';
   }
 
-
-  // show receive button for delivery (project users)
-  const act = document.getElementById('actionButtons');
-  const exists = document.getElementById('btnReceive');
-  if(exists) exists.remove();
-  if(r.type==='ใบจัดส่งวัสดุ' && hasPerm('receive') && currentUser && currentUser.proj===r.proj){
-    const btn = document.createElement('button');
-    btn.id='btnReceive';
-    btn.className='bg-blue-600 text-white px-6 py-2 rounded font-bold shadow-lg no-print';
-    btn.textContent='📥 บันทึกรับวัสดุ';
-    btn.onclick=()=>saveReceived();
-    if(act) act.prepend(btn);
-  }
-
   closeModal('genericModal');
 }
 
-
-async function saveReceived(){
-  const r = currentViewRecord;
-  if(!r) return;
-  if(!(hasPerm('receive') && currentUser && r.proj===currentUser.proj)) return alert('สิทธิ์ไม่เพียงพอ');
-  if(String(r.type||'')!=='ใบจัดส่งวัสดุ') return;
-  document.querySelectorAll('#tableBody tr').forEach((tr,idx)=>{
-    const name = tr.querySelector('.item')?.value?.trim();
-    if(!name) return;
-    const recv = tr.querySelector('.recv-qty');
-    if(recv && r.items && r.items[idx]) r.items[idx].recv = recv.value;
-  });
-  saveLocal();
-  const res = await syncAfterChange('records');
-  if(res?.success) alert('บันทึกจำนวนรับวัสดุแล้ว ✅');
-  else alert('บันทึกแล้ว (Local) แต่ยังไม่ sync');
-}
 function cancelEdit(){ location.reload(); }
 
 // ================= FACTORY WORKFLOW =================
 function openFactory(){
-  modalSetHandlers({reopen:openFactory});
-
-  const tb = `<button onclick="renderFactoryCheck()" class="bg-orange-200 px-3 py-1 rounded font-bold hover:bg-orange-300">✅ เช็คสต๊อก (Y/N)</button><button onclick="renderFactoryPrice()" class="bg-orange-200 px-3 py-1 rounded font-bold hover:bg-orange-300">💰 ใส่ราคา (หลังเช็คสต๊อก)</button>`;
+modalSetHandlers({ reopen: openFactory, addEdit: factoryToolbarAddItem });
+  const tb = `<button onclick="renderFactoryCheck()" class="bg-orange-200 px-3 py-1 rounded font-bold hover:bg-orange-300">✅ เช็คสต๊อก (Y/N)</button><button onclick="renderFactoryPrice()" class="bg-orange-200 px-3 py-1 rounded font-bold hover:bg-orange-300">💰 ใส่ราคา (หลังอนุมัติ)</button>`;
   openModal('📑 Factory Dashboard', '<div id="facContent"></div>', 'bg-orange-600', tb);
   renderFactoryCheck();
 }
 
 function renderFactoryCheck(){
-  if(!hasPerm('factory')) return alert('สิทธิ์ไม่เพียงพอ');
   const reqs = DB.records.filter(r => r.status === 'factory_check');
-  let html = `
-    <div class="text-sm text-gray-700 mb-3">* Factory เลือก <b>Y/N</b> ให้ครบทุกบรรทัด, ใส่ <b>หมายเหตุ (Factory)</b> ได้ และสามารถแก้ไขจำนวน/หน่วย/หมายเหตุ หรือเพิ่มรายการใหม่ได้</div>
-    <div class="text-xs text-gray-500 mb-2">เมื่อเช็คครบแล้ว กด <b>บันทึกและไปใส่ราคา</b> (ขั้นตอน Manager ถูกตัดออก)</div>
-    <table class="w-full text-sm border"><thead class="bg-orange-50"><tr>
-      <th class="p-2 border">เอกสาร</th><th class="p-2 border">โครงการ</th><th class="p-2 border">รายการ</th>
-      <th class="p-2 border text-center">จำนวน</th><th class="p-2 border text-center">หน่วย</th>
-      <th class="p-2 border">หมายเหตุ (ผู้เบิก)</th><th class="p-2 border">หมายเหตุ (Factory)</th>
-      <th class="p-2 border text-center">Stock Y/N</th><th class="p-2 border text-center">จัดการ</th>
-    </tr></thead><tbody>`;
-
-  if(reqs.length===0){
-    html += `<tr><td colspan="9" class="p-4 text-center text-gray-500">ไม่มีรายการรอเช็คสต๊อก</td></tr>`;
-  } else {
+if(!factoryActiveId && reqs.length > 0) factoryActiveId = reqs[0].id;
+  let html = `<div class="text-sm text-gray-600 mb-2">* ต้องเลือก Y/N ให้ครบทุกบรรทัดก่อนส่งให้ผู้อนุมัติ</div><table class="w-full text-sm border"><thead class="bg-orange-50"><tr><th class="p-2 border">เอกสาร</th><th class="p-2 border">โครงการ</th><th class="p-2 border">รายการ</th><th class="p-2 border text-center">จำนวน</th><th class="p-2 border text-center">Stock Y/N</th><th class="p-2 border text-center">ส่งอนุมัติ</th></tr></thead><tbody>`;
+  if(reqs.length===0) html += `<tr><td colspan="6" class="p-4 text-center text-gray-500">ไม่มีรายการรอเช็คสต๊อก</td></tr>`;
+  else {
     reqs.forEach(r=>{
       (r.items||[]).forEach((it,idx)=>{
         const yn = it.stockYN || '';
-        const fnote = it.factoryNote || '';
-        html += `<tr>
-          <td class="p-2 border font-bold text-red-600">${idx===0?(escapeHtml(r.docNo||'Draft')):''}</td>
-          <td class="p-2 border">${idx===0?escapeHtml(r.proj||''):''}</td>
-          <td class="p-2 border">${escapeHtml(it.name||'')}</td>
-          <td class="p-2 border text-center"><input type="number" class="border p-1 rounded w-20 text-center" id="fqty_${r.id}_${idx}" value="${escapeHtml(it.qty||'')}"></td>
-          <td class="p-2 border text-center"><input type="text" class="border p-1 rounded w-16 text-center" id="funit_${r.id}_${idx}" value="${escapeHtml(it.unit||'')}"></td>
-          <td class="p-2 border"><input type="text" class="border p-1 rounded w-full" id="unote_${r.id}_${idx}" value="${escapeHtml(it.note||'')}"></td>
-          <td class="p-2 border"><input type="text" class="border p-1 rounded w-full" id="fnote_${r.id}_${idx}" value="${escapeHtml(fnote)}" placeholder="รายละเอียดเพิ่มเติม..."></td>
-          <td class="p-2 border text-center"><select class="border p-1 rounded" id="yn_${r.id}_${idx}">
-            <option value="" ${yn===''?'selected':''}>-</option>
-            <option value="Y" ${yn==='Y'?'selected':''}>Y</option>
-            <option value="N" ${yn==='N'?'selected':''}>N</option>
-          </select></td>
-          <td class="p-2 border text-center">${idx===0?`
-            <button class="bg-slate-700 text-white px-2 py-1 rounded text-xs font-bold" onclick="factoryAddItem('${escapeJs(r.id)}')">+ เพิ่มรายการ</button>
-            <button class="bg-blue-600 text-white px-2 py-1 rounded text-xs font-bold ml-1" onclick="factorySendToManager('${escapeJs(r.id)}')">บันทึกและไปใส่ราคา</button>
-          `:''}</td>
-        </tr>`;
+        html += `<tr><td class="p-2 border font-bold text-red-600">${idx===0?(escapeHtml(r.docNo||'Draft')):''}</td><td class="p-2 border">${idx===0?escapeHtml(r.proj||''):''}</td><td class="p-2 border">${escapeHtml(it.name||'')}</td><td class="p-2 border text-center">${escapeHtml(it.qty||'')} ${escapeHtml(it.unit||'')}</td><td class="p-2 border text-center"><select class="border p-1 rounded" id="yn_${r.id}_${idx}"><option value="" ${yn===''?'selected':''}>-</option><option value="Y" ${yn==='Y'?'selected':''}>Y</option><option value="N" ${yn==='N'?'selected':''}>N</option></select></td><td class="p-2 border text-center">${idx===0?`<button class="bg-blue-600 text-white px-2 py-1 rounded text-xs font-bold" onclick="factorySendToManager('${escapeJs(r.id)}')">ส่งให้ผู้อนุมัติ</button>`:''}</td></tr>`;
       });
     });
   }
@@ -1231,53 +1007,29 @@ function renderFactoryCheck(){
   document.getElementById('facContent').innerHTML = html;
 }
 
-async function factoryAddItem(id){
-  const r = DB.records.find(x=>x.id===id);
-  if(!r) return alert('ไม่พบเอกสาร');
-  const name = prompt('ชื่อรายการใหม่:');
-  if(!name) return;
-  const qty = prompt('จำนวน:', '1') || '1';
-  const unit = prompt('หน่วย:', '') || '';
-  const note = prompt('หมายเหตุ (ผู้เบิก/เพิ่มเติม):', '') || '';
-  r.items = r.items || [];
-  r.items.push({ name, qty, unit, note, price:0, stockYN:'', stockQty:'', priceFinal:'', factoryNote:'' });
-  saveLocal();
-  const res = await syncAfterChange('records');
-  if(!res?.success) alert('เพิ่มรายการ (Local) แล้ว แต่ยังไม่ sync');
-  renderFactoryCheck();
-}
-
-
 async function factorySendToManager(id){
-  if(!hasPerm('factory')) return alert('สิทธิ์ไม่เพียงพอ');
   const r = DB.records.find(x=>x.id===id);
   if(!r) return alert('ไม่พบเอกสาร');
 
   r.items.forEach((it,idx)=>{
     const sel = document.getElementById(`yn_${id}_${idx}`);
-    const q = document.getElementById(`fqty_${id}_${idx}`);
-    const u = document.getElementById(`funit_${id}_${idx}`);
-    const un = document.getElementById(`unote_${id}_${idx}`);
-    const fn = document.getElementById(`fnote_${id}_${idx}`);
-    it.stockYN = sel ? sel.value : (it.stockYN||'');
-    if(q) it.qty = q.value;
-    if(u) it.unit = u.value;
-    if(un) it.note = un.value;
-    if(fn) it.factoryNote = fn.value;
+    it.stockYN = sel ? sel.value : '';
   });
 
   const incomplete = r.items.some(it => !['Y','N'].includes(it.stockYN));
   if(incomplete) return alert('กรุณาเช็ค Stock Y/N ให้ครบทุกบรรทัดก่อน');
 
-  r.items.forEach(it=>{ if(it.stockYN==='Y') it.priceFinal = getStockPriceByName(it.name); });
+  // ถ้า Y เติมราคา final จากสต๊อกไว้ก่อน
+  r.items.forEach(it=>{
+    if(it.stockYN==='Y') it.priceFinal = getStockPriceByName(it.name);
+  });
 
-  r.status = 'factory_price';
+  r.status = 'manager_review';
   saveLocal();
   const res = await syncAfterChange('records');
-  if(!res?.success) alert('บันทึก (Local) แล้ว แต่ยังไม่ sync');
+  if(!res?.success) alert('ส่งต่อ (Local) แล้ว แต่ยังไม่ sync: ' + (res?.error||''));
   renderFactoryCheck();
 }
-
 
 function renderFactoryPrice(){
   const reqs = DB.records.filter(r => r.status === 'factory_price');
@@ -1315,8 +1067,6 @@ async function factoryConfirmPrice(id){
     }
   }
 
-  r.approvedBy = 'factory';
-  r.approvedAt = new Date().toISOString();
   r.status = 'delivered';
   saveLocal();
   const res = await syncAfterChange('records');
@@ -1326,9 +1076,15 @@ async function factoryConfirmPrice(id){
 
 // ================= MANAGER WORKFLOW =================
 function openManager(){
-  openModal('✅ อนุมัติงาน (Manager)', `<div class="p-4 text-center text-gray-600">เมนูนี้ถูกปิดใช้งานแล้ว — ให้ Factory เป็นผู้ตรวจ/อนุมัติและใส่ราคาแทน</div>`, 'bg-blue-600');
+  const reqs = DB.records.filter(r => r.status === 'manager_review');
+  let html = `<table class="w-full text-sm border"><thead class="bg-blue-100"><tr><th class="p-2 border">เอกสาร</th><th class="p-2 border">โครงการ</th><th class="p-2 border">ประเภท</th><th class="p-2 border text-center">Stock Y/N</th><th class="p-2 border text-center">จัดการ</th></tr></thead><tbody>`;
+  if(reqs.length===0) html += `<tr><td colspan="5" class="p-4 text-center text-gray-500">ไม่มีรายการรออนุมัติ</td></tr>`;
+  else {
+    html += reqs.map(r=>`<tr><td class="p-2 border font-bold text-red-600">${escapeHtml(r.docNo||'')}</td><td class="p-2 border">${escapeHtml(r.proj||'')}</td><td class="p-2 border">${escapeHtml(r.type||'')}</td><td class="p-2 border text-center"><button onclick="viewOrEditDoc('${escapeJs(r.id)}')" class="text-blue-600 underline mr-2">ดูรายละเอียด</button><button onclick="approveDoc('${escapeJs(r.id)}')" class="bg-green-500 text-white px-3 py-1 rounded font-bold shadow">อนุมัติ</button></td></tr>`).join('');
+  }
+  html += `</tbody></table>`;
+  openModal('✅ อนุมัติงาน (Manager)', html, 'bg-blue-600');
 }
-
 
 async function approveDoc(id){
   syncItemsBeforeApprove();
@@ -1346,89 +1102,28 @@ async function approveDoc(id){
 }
 
 // ================= STOCK =================
-
-// ================= STOCK EDIT & IMAGE UPLOAD =================
-let currentStockEditIndex = null;
-function stockPickImg(){
-  const f = document.getElementById('sImgFile');
-  if(f) f.click();
-}
-function stockHandleImg(ev){
-  const file = ev.target.files && ev.target.files[0];
-  if(!file) return;
-  const reader = new FileReader();
-  reader.onload = (e)=>{
-    const url = e.target.result;
-    const img = document.getElementById('sImg');
-    if(img) img.value = url;
-    const pv = document.getElementById('sImgPreview');
-    if(pv){ pv.src = url; pv.classList.remove('hidden'); }
-  };
-  reader.readAsDataURL(file);
-  ev.target.value='';
-}
-function stockEdit(i){
-  const it = DB.stock[i];
-  if(!it) return;
-  currentStockEditIndex = i;
-  document.getElementById('sCode').value = it.code||'';
-  document.getElementById('sName').value = it.name||'';
-  document.getElementById('sSize').value = it.size||'';
-  document.getElementById('sUnit').value = it.unit||'';
-  document.getElementById('sPrice').value = it.price||0;
-  document.getElementById('sSup').value = it.supplier||'';
-  document.getElementById('sImg').value = it.img||'';
-  const pv = document.getElementById('sImgPreview');
-  if(pv){ if(it.img){ pv.src=it.img; pv.classList.remove('hidden'); } else { pv.classList.add('hidden'); } }
-  const btn = document.getElementById('btnStockSave');
-  if(btn) btn.textContent = 'บันทึกการแก้ไข';
-}
 function openStock(){
-  modalSetHandlers({reopen:openStock});
-
-  if(!(hasPerm('stock') || hasPerm('stock_view') || ['admin','admin factory'].includes((currentUser?.role||'').toLowerCase()))){
-    return alert('สิทธิ์ไม่เพียงพอ');
-  }
-  const canEdit = hasPerm('stock') || ['admin','admin factory'].includes((currentUser?.role||'').toLowerCase());
+  const isFac = ['admin','admin factory'].includes((currentUser?.role||'').toLowerCase());
   let tb = '';
-  if(canEdit){
-    tb = `<div class="grid grid-cols-2 sm:grid-cols-4 gap-2 w-full text-sm">
-      <input type="text" id="sCode" placeholder="รหัสสินค้า" class="border p-1 rounded">
-      <input type="text" id="sName" placeholder="ชื่อรายการ" class="border p-1 rounded">
-      <input type="text" id="sSize" placeholder="ขนาด" class="border p-1 rounded">
-      <input type="text" id="sUnit" placeholder="หน่วย" class="border p-1 rounded">
-      <input type="number" id="sPrice" placeholder="ราคา/ต้นทุน" class="border p-1 rounded">
-      <input type="text" id="sSup" placeholder="Supplier" class="border p-1 rounded">
-      <input type="text" id="sImg" placeholder="Link/รูป (DataURL)" class="border p-1 rounded col-span-2">
-      <div class="col-span-2 flex items-center gap-2">
-        <input type="file" id="sImgFile" accept="image/*" class="hidden" onchange="stockHandleImg(event)">
-        <button type="button" onclick="stockPickImg()" class="bg-gray-200 px-3 py-1 rounded font-bold">อัปโหลดรูป</button>
-        <img id="sImgPreview" class="hidden h-10 w-10 object-cover rounded border" alt="preview">
-      </div>
-      <button id="btnStockSave" onclick="saveStock()" class="bg-amber-600 text-white px-2 py-1 rounded font-bold col-span-2 sm:col-span-4">บันทึก/เพิ่มสต๊อก</button>
-    </div>`;
+  if(isFac){
+    tb = `<div class="grid grid-cols-2 sm:grid-cols-4 gap-2 w-full text-sm"><input type="text" id="sCode" placeholder="รหัสสินค้า" class="border p-1 rounded"><input type="text" id="sName" placeholder="ชื่อรายการ" class="border p-1 rounded"><input type="text" id="sSize" placeholder="ขนาด" class="border p-1 rounded"><input type="text" id="sUnit" placeholder="หน่วย" class="border p-1 rounded"><input type="number" id="sPrice" placeholder="ราคา/ต้นทุน" class="border p-1 rounded"><input type="text" id="sSup" placeholder="Supplier" class="border p-1 rounded"><input type="text" id="sImg" placeholder="Link รูปภาพ" class="border p-1 rounded col-span-2"><button onclick="saveStock()" class="bg-amber-600 text-white px-2 py-1 rounded font-bold col-span-2 sm:col-span-4">บันทึก/เพิ่มสต๊อก</button></div>`;
   }
   openModal('📦 ฐานข้อมูลสต๊อกวัสดุ', '<div id="stockContent"></div>', 'bg-amber-600', tb);
   renderStock();
 }
 
-
 function renderStock(){
-  const canEdit = hasPerm('stock') || ['admin','admin factory'].includes((currentUser?.role||'').toLowerCase());
+  const isFac = ['admin','admin factory'].includes((currentUser?.role||'').toLowerCase());
   let html = `<table class="w-full text-sm border"><thead class="bg-gray-200"><tr><th class="p-2 border w-16">รูป</th><th class="p-2 border">รหัส</th><th class="p-2 border">ชื่อรายการ</th><th class="p-2 border">ขนาด</th><th class="p-2 border">หน่วย</th><th class="p-2 border">Supplier</th><th class="p-2 border">ราคา</th><th class="p-2 border text-center">จัดการ</th></tr></thead><tbody>`;
-  html += (DB.stock||[]).map((s,i)=>`<tr><td class="p-2 border text-center">${s.img ? `<a href="${s.img}" target="_blank" rel="noopener"><img src="${s.img}" class="w-10 h-10 object-cover mx-auto rounded"/></a>` : '-'}</td><td class="p-2 border">${escapeHtml(s.code||'-')}</td><td class="p-2 border font-bold">${escapeHtml(s.name||'')}</td><td class="p-2 border">${escapeHtml(s.size||'-')}</td><td class="p-2 border">${escapeHtml(s.unit||'-')}</td><td class="p-2 border">${escapeHtml(s.supplier||'-')}</td><td class="p-2 border text-right">${Number(s.price||0).toLocaleString()}</td><td class="p-2 border text-center"><button onclick="addFromStock('${escapeJs(s.name)}','${escapeJs(s.unit||'')}',${Number(s.price||0)})" class="text-blue-600 font-bold bg-blue-50 px-2 py-1 rounded text-xs mb-1 block w-full">เพิ่มลงใบเบิก</button>${canEdit?`<button onclick="stockEdit(${i})" class="text-slate-700 font-bold bg-slate-100 px-2 py-1 rounded text-xs mb-1 block w-full">แก้ไข</button><button onclick="delStock(${i})" class="text-red-500 font-bold bg-red-50 px-2 py-1 rounded text-xs w-full">ลบ</button>`:''}</td></tr>`).join('');
+  html += DB.stock.map((s,i)=>`<tr><td class="p-2 border text-center">${s.img ? `<a href="${s.img}" target="_blank" rel="noopener"><img src="${s.img}" class="w-10 h-10 object-cover mx-auto rounded"/></a>` : '-'}</td><td class="p-2 border">${escapeHtml(s.code||'-')}</td><td class="p-2 border font-bold">${escapeHtml(s.name||'')}</td><td class="p-2 border">${escapeHtml(s.size||'-')}</td><td class="p-2 border">${escapeHtml(s.unit||'-')}</td><td class="p-2 border">${escapeHtml(s.supplier||'-')}</td><td class="p-2 border text-right">${Number(s.price||0).toLocaleString()}</td><td class="p-2 border text-center"><button onclick="addFromStock('${escapeJs(s.name)}','${escapeJs(s.unit||'')}',${Number(s.price||0)})" class="text-blue-600 font-bold bg-blue-50 px-2 py-1 rounded text-xs mb-1 block w-full">เพิ่มลงใบเบิก</button>${isFac?`<button onclick="delStock(${i})" class="text-red-500 font-bold bg-red-50 px-2 py-1 rounded text-xs w-full">ลบ</button>`:''}</td></tr>`).join('');
   html += `</tbody></table>`;
   document.getElementById('stockContent').innerHTML = html;
 }
 
-
 async function saveStock(){
-  if(!(hasPerm('stock') || ['admin','admin factory'].includes((currentUser?.role||'').toLowerCase()))){
-    return alert('สิทธิ์ไม่เพียงพอ');
-  }
   const name = document.getElementById('sName')?.value?.trim();
   if(!name) return alert('กรอกชื่อรายการ');
-  const obj = {
+  DB.stock.push({
     code: (document.getElementById('sCode')?.value||'').trim(),
     name,
     size: (document.getElementById('sSize')?.value||'').trim(),
@@ -1436,21 +1131,12 @@ async function saveStock(){
     price: Number(document.getElementById('sPrice')?.value||0),
     supplier: (document.getElementById('sSup')?.value||'').trim(),
     img: (document.getElementById('sImg')?.value||'').trim(),
-  };
-  if(currentStockEditIndex !== null){
-    DB.stock[currentStockEditIndex] = obj;
-    currentStockEditIndex = null;
-    const btn = document.getElementById('btnStockSave');
-    if(btn) btn.textContent = 'บันทึก/เพิ่มสต๊อก';
-  } else {
-    DB.stock.push(obj);
-  }
+  });
   saveLocal();
   const res = await syncAfterChange('stock');
   if(res?.success) renderStock();
   else alert('บันทึกสต๊อกไม่สำเร็จ: ' + (res?.error||''));
 }
-
 
 async function delStock(i){
   if(!confirm('ลบรายการสต๊อกนี้?')) return;
@@ -1497,39 +1183,34 @@ async function delEmp(i){
 
 // ================= SUMMARY =================
 function openSummary(){
-  modalSetHandlers({reopen:openSummary});
-
-  if(!hasPerm('summary')) return alert('สิทธิ์ไม่เพียงพอ');
   const role = (currentUser?.role||'').toLowerCase();
   let sum = {};
   DB.records.filter(r => r.status === 'delivered').forEach(r=>{
     if(role === 'project site' && r.proj !== currentUser.proj) return;
-    if(!sum[r.proj]) sum[r.proj] = { matY:0, matN:0, labor:0, veh:0 };
+    if(!sum[r.proj]) sum[r.proj] = { mat:0, labor:0, veh:0 };
+
     (r.items||[]).forEach(i=>{
       const qty = Number(i.qty||0);
       const priceUsed = i.stockYN === 'Y' ? getStockPriceByName(i.name) : Number(i.priceFinal||0);
       const cost = qty * priceUsed;
-      if(r.type === 'ใบเบิกวัสดุ' || r.type === 'ใบจัดส่งวัสดุ'){
-        if(i.stockYN==='Y') sum[r.proj].matY += cost;
-        else if(i.stockYN==='N') sum[r.proj].matN += cost;
-      } else if(r.type === 'ใบเบิกคนงาน') sum[r.proj].labor += cost;
+      if(r.type === 'ใบเบิกวัสดุ' || r.type === 'ใบจัดส่งวัสดุ') sum[r.proj].mat += cost;
+      else if(r.type === 'ใบเบิกคนงาน') sum[r.proj].labor += cost;
       else if(r.type === 'ใบเบิกรถ') sum[r.proj].veh += cost;
     });
   });
 
-  let html = `<table class="w-full text-sm border"><thead class="bg-indigo-100"><tr><th class="p-2 border">โครงการ</th><th class="p-2 border text-right">ค่าวัสดุ Y (฿)</th><th class="p-2 border text-right">ค่าวัสดุ N (฿)</th><th class="p-2 border text-right">ค่าแรง (฿)</th><th class="p-2 border text-right">ค่ารถ (฿)</th><th class="p-2 border text-right font-bold">รวม (฿)</th></tr></thead><tbody>`;
+  let html = `<table class="w-full text-sm border"><thead class="bg-indigo-100"><tr><th class="p-2 border">โครงการ</th><th class="p-2 border text-right">ค่าวัสดุ (฿)</th><th class="p-2 border text-right">ค่าแรง (฿)</th><th class="p-2 border text-right">ค่ารถ (฿)</th><th class="p-2 border text-right font-bold">รวม (฿)</th></tr></thead><tbody>`;
   const keys = Object.keys(sum);
-  if(keys.length === 0) html += `<tr><td colspan="6" class="text-center p-4 text-gray-500">ยังไม่มีข้อมูลต้นทุนที่จัดส่งแล้ว</td></tr>`;
+  if(keys.length === 0) html += `<tr><td colspan="5" class="text-center p-4 text-gray-500">ยังไม่มีข้อมูลต้นทุนที่จัดส่งแล้ว</td></tr>`;
   else {
     keys.forEach(k=>{
-      const total = sum[k].matY + sum[k].matN + sum[k].labor + sum[k].veh;
-      html += `<tr><td class="p-2 border font-bold">${escapeHtml(k)}</td><td class="p-2 border text-right text-amber-700">${sum[k].matY.toLocaleString()}</td><td class="p-2 border text-right text-amber-700">${sum[k].matN.toLocaleString()}</td><td class="p-2 border text-right text-teal-700">${sum[k].labor.toLocaleString()}</td><td class="p-2 border text-right text-blue-700">${sum[k].veh.toLocaleString()}</td><td class="p-2 border text-right font-bold text-red-600">${total.toLocaleString()}</td></tr>`;
+      const total = sum[k].mat + sum[k].labor + sum[k].veh;
+      html += `<tr><td class="p-2 border font-bold">${escapeHtml(k)}</td><td class="p-2 border text-right text-amber-700">${sum[k].mat.toLocaleString()}</td><td class="p-2 border text-right text-teal-700">${sum[k].labor.toLocaleString()}</td><td class="p-2 border text-right text-blue-700">${sum[k].veh.toLocaleString()}</td><td class="p-2 border text-right font-bold text-red-600">${total.toLocaleString()}</td></tr>`;
     });
   }
   html += `</tbody></table>`;
-  openModal('📊 สรุปต้นทุน (แยกวัสดุ Y/N)', html, 'bg-indigo-600');
+  openModal('📊 สรุปต้นทุนโครงการ', html, 'bg-indigo-600');
 }
-
 
 // ================= MISC =================
 function openPullModal(){ alert('ฟังก์ชันดึงข้อมูลใบเบิก (Pull) ยังไม่ได้เปิดใช้งานในเวอร์ชันนี้'); }
@@ -1549,3 +1230,4 @@ document.addEventListener('DOMContentLoaded', async ()=>{
 
 </body>
 </html>
+
