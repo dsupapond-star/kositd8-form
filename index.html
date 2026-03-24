@@ -26,7 +26,7 @@
         display: block !important;
         width: 100% !important;
         text-align: center !important;
-        font-size: 19pt !important;
+        font-size: 24pt !important;
         font-weight: 800 !important;
         margin: 0 0 12px 0 !important;
       }
@@ -323,26 +323,6 @@ let currentUser = null;
 let currentEditId = null;
 let currentPulledReqId = null;
 let currentViewRecord = null;
-// ===== Factory Active Document (ใบเบิกที่เลือกอยู่) =====
-let factoryActiveId = null;
-
-function setFactoryActive(id){
-  factoryActiveId = id;
-}
-
-// ปุ่ม ➕ บน toolbar ในหน้า Factory จะเรียกตัวนี้
-function factoryToolbarAddItem(){
-  if(!hasPerm('factory')) return alert('สิทธิ์ไม่เพียงพอ');
-
-  // ถ้ายังไม่เลือกใบ ให้เลือกใบแรกในคิว factory_check
-  const reqs = DB.records.filter(r => r.status === 'factory_check');
-  if(!factoryActiveId){
-    if(reqs.length === 0) return alert('ไม่มีใบเบิกรอเช็คสต๊อก');
-    factoryActiveId = reqs[0].id;
-  }
-  factoryAddItem(factoryActiveId);
-}
-``
 let currentAutocompleteInput = null;
 let isViewMode = false;
 
@@ -461,105 +441,12 @@ function doLogout(){ localStorage.removeItem('kos_active_user'); location.reload
 
 // ================= MODAL =================
 function openModal(title, contentHtml, colorClass='bg-gray-800', toolbarHtml=''){
-  document.getElementById('modalHeader').className =
-    `p-4 border-b flex justify-between items-center rounded-t-xl ${colorClass}`;
+  document.getElementById('modalHeader').className = `p-4 border-b flex justify-between items-center rounded-t-xl ${colorClass}`;
   document.getElementById('modalTitle').innerText = title;
-
-  const tbEl = document.getElementById('modalToolbar');
-  tbEl.classList.remove('hidden');
-  tbEl.innerHTML = `
-    <div class="flex flex-wrap gap-2 items-center w-full">
-      <div class="flex items-center gap-2 flex-1 min-w-[220px]">
-        <span class="text-xs font-bold text-gray-600">🔎</span>
-        <input id="modalSearch" placeholder="ค้นหาในหน้าต่างนี้..."
-          class="flex-1 border rounded px-2 py-1 text-sm"
-          oninput="modalDoSearch(this.value)" />
-      </div>
-      <button onclick="modalDoRefresh()"
-        class="bg-slate-700 text-white px-3 py-1 rounded font-bold text-sm">🔄 รีเฟรช</button>
-      <button onclick="modalDoExport()"
-        class="bg-emerald-700 text-white px-3 py-1 rounded font-bold text-sm">⬇️ Export</button>
-      <button onclick="modalDoAddEdit()"
-        class="bg-blue-700 text-white px-3 py-1 rounded font-bold text-sm">➕ เพิ่ม/แก้ไข</button>
-      <button onclick="closeModal('genericModal')"
-        class="bg-gray-300 text-gray-800 px-3 py-1 rounded font-bold text-sm">✖ ปิด</button>
-    </div>
-    ${toolbarHtml || ''}
-  `;
-
+  document.getElementById('modalToolbar').innerHTML = toolbarHtml;
+  document.getElementById('modalToolbar').classList.toggle('hidden', toolbarHtml === '');
   document.getElementById('modalContent').innerHTML = contentHtml;
   document.getElementById('genericModal').classList.remove('hidden');
-}
-// ===== Universal Modal Toolbar Runtime =====
-window.__modalCtx = window.__modalCtx || { reopen:null, export:null, addEdit:null };
-
-function modalSetHandlers(h={}){
-  window.__modalCtx.reopen = h.reopen || null;
-  window.__modalCtx.export = h.export || null;
-  window.__modalCtx.addEdit = h.addEdit || null;
-}
-
-function modalDoRefresh(){
-  try{
-    if(typeof window.__modalCtx.reopen === 'function') return window.__modalCtx.reopen();
-    return location.reload();
-  }catch(e){ console.error(e); alert('รีเฟรชไม่สำเร็จ'); }
-}
-
-function modalDoExport(){
-  try{
-    if(typeof window.__modalCtx.export === 'function') return window.__modalCtx.export();
-
-    // fallback: export ตารางแรกใน modalContent เป็น CSV
-    const root = document.getElementById('modalContent');
-    const table = root ? root.querySelector('table') : null;
-    if(!table){ alert('ไม่พบตารางสำหรับ Export'); return; }
-
-    const rows = [];
-    table.querySelectorAll('tr').forEach(tr=>{
-      const cols = Array.from(tr.querySelectorAll('th,td'))
-        .map(td=>td.innerText.replace(/\s+/g,' ').trim());
-      if(cols.length) rows.push(cols);
-    });
-
-    const csv = rows.map(r=>r.map(x=>`"${String(x).replace(/"/g,'""')}"`).join(',')).join('\n');
-    const blob = new Blob([csv], {type:'text/csv;charset=utf-8;'});
-    const a = document.createElement('a');
-    a.href = URL.createObjectURL(blob);
-    a.download = `export_${new Date().toISOString().slice(0,10)}.csv`;
-    document.body.appendChild(a); a.click(); a.remove();
-  }catch(e){ console.error(e); alert('Export ไม่สำเร็จ'); }
-}
-
-function modalDoAddEdit(){
-  try{
-    if(typeof window.__modalCtx.addEdit === 'function') return window.__modalCtx.addEdit();
-    alert('หน้านี้ยังไม่ได้กำหนดปุ่ม เพิ่ม/แก้ไข');
-  }catch(e){ console.error(e); alert('ทำรายการไม่สำเร็จ'); }
-}
-
-function modalDoSearch(q){
-  q = String(q||'').toLowerCase().trim();
-  const root = document.getElementById('modalContent');
-  if(!root) return;
-
-  // ถ้ามีตาราง -> filter แถว
-  const tbodies = root.querySelectorAll('tbody');
-  if(tbodies.length){
-    tbodies.forEach(tbody=>{
-      Array.from(tbody.querySelectorAll('tr')).forEach(tr=>{
-        const hit = tr.innerText.toLowerCase().includes(q);
-        tr.style.display = q ? (hit ? '' : 'none') : '';
-      });
-    });
-    return;
-  }
-
-  // fallback: ซ่อน/โชว์บล็อก
-  Array.from(root.children).forEach(el=>{
-    const hit = el.innerText.toLowerCase().includes(q);
-    el.style.display = q ? (hit ? '' : 'none') : '';
-  });
 }
 function closeModal(id){ document.getElementById(id).classList.add('hidden'); }
 
@@ -984,7 +871,6 @@ function cancelEdit(){ location.reload(); }
 
 // ================= FACTORY WORKFLOW =================
 function openFactory(){
-modalSetHandlers({ reopen: openFactory, addEdit: factoryToolbarAddItem });
   const tb = `<button onclick="renderFactoryCheck()" class="bg-orange-200 px-3 py-1 rounded font-bold hover:bg-orange-300">✅ เช็คสต๊อก (Y/N)</button><button onclick="renderFactoryPrice()" class="bg-orange-200 px-3 py-1 rounded font-bold hover:bg-orange-300">💰 ใส่ราคา (หลังอนุมัติ)</button>`;
   openModal('📑 Factory Dashboard', '<div id="facContent"></div>', 'bg-orange-600', tb);
   renderFactoryCheck();
@@ -992,7 +878,6 @@ modalSetHandlers({ reopen: openFactory, addEdit: factoryToolbarAddItem });
 
 function renderFactoryCheck(){
   const reqs = DB.records.filter(r => r.status === 'factory_check');
-if(!factoryActiveId && reqs.length > 0) factoryActiveId = reqs[0].id;
   let html = `<div class="text-sm text-gray-600 mb-2">* ต้องเลือก Y/N ให้ครบทุกบรรทัดก่อนส่งให้ผู้อนุมัติ</div><table class="w-full text-sm border"><thead class="bg-orange-50"><tr><th class="p-2 border">เอกสาร</th><th class="p-2 border">โครงการ</th><th class="p-2 border">รายการ</th><th class="p-2 border text-center">จำนวน</th><th class="p-2 border text-center">Stock Y/N</th><th class="p-2 border text-center">ส่งอนุมัติ</th></tr></thead><tbody>`;
   if(reqs.length===0) html += `<tr><td colspan="6" class="p-4 text-center text-gray-500">ไม่มีรายการรอเช็คสต๊อก</td></tr>`;
   else {
@@ -1230,4 +1115,5 @@ document.addEventListener('DOMContentLoaded', async ()=>{
 
 </body>
 </html>
+
 
